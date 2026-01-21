@@ -2,7 +2,10 @@ package com.playtab.userservice.service.auth;
 
 import com.playtab.userservice.config.JwtProperties;
 import com.playtab.userservice.entity.enums.Role;
+import com.playtab.userservice.exception.DomainException;
+import com.playtab.userservice.exception.ErrorCode;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Service;
@@ -60,6 +63,28 @@ public class TokenService {
                 .getPayload();
 
         return UUID.fromString(c.getSubject());
+    }
+
+    public UUID parseSubject(String jwt) {
+        try {
+            Claims c = Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(jwt).getPayload();
+            return UUID.fromString(c.getSubject());
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new DomainException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
+    }
+
+    public UUID parseSessionId(String refreshJwt) {
+        try {
+            Claims c = Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(refreshJwt).getPayload();
+            Object sid = c.get("sid");
+            if (sid == null) throw new DomainException(ErrorCode.INVALID_REFRESH_TOKEN);
+            return UUID.fromString(sid.toString());
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new DomainException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
     }
 
     public long accessTtlSeconds() {

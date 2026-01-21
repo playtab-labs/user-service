@@ -2,78 +2,85 @@ package com.playtab.userservice.grpc;
 
 import com.playtab.userservice.dto.auth.AuthTokens;
 import com.playtab.userservice.dto.auth.LoginCommand;
+import com.playtab.userservice.dto.auth.LogoutCommand;
+import com.playtab.userservice.dto.auth.RefreshCommand;
 import com.playtab.userservice.exception.GrpcExceptionMapper;
 import com.playtab.userservice.proto.v1.*;
 import com.playtab.userservice.service.auth.AuthService;
-import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
 
 @GrpcService
+@RequiredArgsConstructor
 public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
 
     private final AuthService authService;
-    private final GrpcExceptionMapper ex;
-
-    public AuthGrpcService(AuthService authService, GrpcExceptionMapper ex) {
-        this.authService = authService;
-        this.ex = ex;
-    }
+    private final GrpcExceptionMapper exceptionMapper;
 
     @Override
     public void loginWithEmail(LoginWithEmailRequest request, StreamObserver<AuthTokensResponse> responseObserver) {
         try {
-            ClientContext c = request.getClient();
+            LoginCommand cmd = LoginCommand.builder()
+                    .email(request.getEmail())
+                    .password(request.getPassword())
+                    .deviceFingerprint(request.hasClient() ? request.getClient().getDeviceFingerprint() : null)
+                    .userAgent(request.hasClient() ? request.getClient().getUserAgent() : null)
+                    .ipAddress(request.hasClient() ? request.getClient().getIpAddress() : null)
+                    .build();
 
-            AuthTokens tokens = authService.loginWithEmail(
-                    LoginCommand.builder()
-                            .email(request.getEmail())
-                            .password(request.getPassword())
-                            .deviceFingerprint(c.getDeviceFingerprint())
-                            .userAgent(c.getUserAgent())
-                            .ipAddress(c.getIpAddress())
-                            .build()
-            );
+            AuthTokens tokens = authService.loginWithEmail(cmd);
 
-            responseObserver.onNext(AuthTokensResponse.newBuilder()
-                    .setAccessToken(tokens.accessToken())
-                    .setRefreshToken(tokens.refreshToken())
-                    .setAccessExpiresInSeconds(tokens.accessExpiresInSeconds())
-                    .setRefreshExpiresInSeconds(tokens.refreshExpiresInSeconds())
-                    .setProfileCompleted(tokens.profileCompleted())
-                    .build());
+            responseObserver.onNext(toAuthTokensResponse(tokens));
             responseObserver.onCompleted();
-
         } catch (Exception e) {
-            responseObserver.onError(ex.toStatus(e));
+            responseObserver.onError(exceptionMapper.toStatus(e));
         }
     }
 
     @Override
     public void refreshTokens(RefreshTokensRequest request, StreamObserver<AuthTokensResponse> responseObserver) {
-        responseObserver.onError(Status.UNIMPLEMENTED
-                .withDescription("RefreshTokens will be implemented in Step5 (session lookup + rotation).")
-                .asRuntimeException());
+        try {
+            RefreshCommand cmd = RefreshCommand.builder()
+                    .refreshToken(request.getRefreshToken())
+                    .deviceFingerprint(request.hasClient() ? request.getClient().getDeviceFingerprint() : null)
+                    .userAgent(request.hasClient() ? request.getClient().getUserAgent() : null)
+                    .ipAddress(request.hasClient() ? request.getClient().getIpAddress() : null)
+                    .build();
+
+            AuthTokens tokens = authService.refreshTokens(cmd);
+
+            responseObserver.onNext(toAuthTokensResponse(tokens));
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(exceptionMapper.toStatus(e));
+        }
     }
 
     @Override
     public void logout(LogoutRequest request, StreamObserver<LogoutResponse> responseObserver) {
-        responseObserver.onError(Status.UNIMPLEMENTED
-                .withDescription("Logout will be implemented in Step5 (session revoke).")
-                .asRuntimeException());
+        try {
+            LogoutCommand cmd = LogoutCommand.builder()
+                    .refreshToken(request.getRefreshToken())
+                    .build();
+
+            authService.logout(cmd);
+
+            responseObserver.onNext(LogoutResponse.newBuilder().setSuccess(true).build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(exceptionMapper.toStatus(e));
+        }
     }
 
-    @Override
-    public void loginWithSocial(LoginWithSocialRequest request, StreamObserver<AuthTokensResponse> responseObserver) {
-        responseObserver.onError(Status.UNIMPLEMENTED
-                .withDescription("LoginWithSocial will be implemented in Step6 (OIDC federation).")
-                .asRuntimeException());
+    private AuthTokensResponse toAuthTokensResponse(AuthTokens t) {
+        return AuthTokensResponse.newBuilder()
+                .setAccessToken(t.accessToken())
+                .setRefreshToken(t.refreshToken())
+                .setAccessExpiresInSeconds(t.accessExpiresInSeconds())
+                .setRefreshExpiresInSeconds(t.refreshExpiresInSeconds())
+                .setProfileCompleted(t.profileCompleted())
+                .build();
     }
 
-    @Override
-    public void getMyAuthSummary(GetMyAuthSummaryRequest request, StreamObserver<MyAuthSummaryResponse> responseObserver) {
-        responseObserver.onError(Status.UNIMPLEMENTED
-                .withDescription("GetMyAuthSummary is optional. Implement later if needed.")
-                .asRuntimeException());
-    }
 }

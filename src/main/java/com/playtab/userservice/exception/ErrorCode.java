@@ -17,7 +17,12 @@ public enum ErrorCode {
 
     REFRESH_TOKEN_INVALID("REFRESH_TOKEN_INVALID", "Invalid refresh token."),
     REFRESH_TOKEN_EXPIRED("REFRESH_TOKEN_EXPIRED", "Refresh token expired."),
-    SESSION_REVOKED("SESSION_REVOKED", "Session revoked.");
+    SESSION_REVOKED("SESSION_REVOKED", "Session revoked."),
+
+    INVALID_REFRESH_TOKEN("INVALID_REFRESH_TOKEN", "Invalid refresh token."),
+    REFRESH_TOKEN_REVOKED("REFRESH_TOKEN_REVOKED", "Refresh token is revoked."),
+    PROFILE_NOT_FOUND("PROFILE_NOT_FOUND", "Profile not found.");
+
 
 
     private final String code;

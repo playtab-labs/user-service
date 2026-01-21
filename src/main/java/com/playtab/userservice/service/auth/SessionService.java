@@ -2,7 +2,10 @@ package com.playtab.userservice.service.auth;
 
 import com.playtab.userservice.entity.AuthIdentity;
 import com.playtab.userservice.entity.AuthSession;
+import com.playtab.userservice.exception.DomainException;
+import com.playtab.userservice.exception.ErrorCode;
 import com.playtab.userservice.repository.AuthSessionRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -42,6 +45,47 @@ public class SessionService {
     public void revoke(AuthSession session) {
         session.setIsRevoked(true);
         repo.save(session);
+    }
+
+    @Transactional
+    public AuthSession rotate(AuthIdentity identity,
+                              AuthSession current,
+                              String newRefreshRaw,
+                              String deviceFingerprint,
+                              String userAgent,
+                              String ipAddress,
+                              Instant newExpiresAt) {
+
+        // 1) 현재 세션 revoke
+        current.setIsRevoked(true);
+        repo.save(current);
+
+        // 2) 새 세션 생성(새 refresh hash)
+        AuthSession next = new AuthSession();
+        next.setIdentity(identity);
+        next.setRefreshTokenHash(sha256Hex(newRefreshRaw));
+        next.setDeviceFingerprint(deviceFingerprint);
+        next.setUserAgent(userAgent);
+        next.setIpAddress(ipAddress);
+        next.setExpiresAt(newExpiresAt);
+        next.setIsRevoked(false);
+
+        return repo.save(next);
+    }
+
+    @Transactional
+    public AuthSession validateActiveSessionOrThrow(AuthSession s) {
+        if (Boolean.TRUE.equals(s.getIsRevoked())) {
+            throw new DomainException(ErrorCode.REFRESH_TOKEN_REVOKED);
+        }
+        if (s.getExpiresAt() != null && s.getExpiresAt().isBefore(Instant.now())) {
+            throw new DomainException(ErrorCode.REFRESH_TOKEN_EXPIRED);
+        }
+        return s;
+    }
+
+    public Optional<AuthSession> findByRefreshTokenForUpdate(String refreshTokenRaw) {
+        return repo.findByRefreshTokenHashForUpdate(sha256Hex(refreshTokenRaw));
     }
 
     private String sha256Hex(String raw) {
