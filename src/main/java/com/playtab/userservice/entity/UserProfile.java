@@ -42,6 +42,12 @@ public class UserProfile {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Column(name="is_adult")
+    private Boolean isAdult;
+
+    @Column(name="updated_at")
+    private Instant updatedAt;
+
     @PrePersist
     void prePersist() {
         if (profileId == null) profileId = UUID.randomUUID();

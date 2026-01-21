@@ -2,6 +2,7 @@ package com.playtab.userservice.service.auth;
 
 import com.playtab.userservice.config.JwtProperties;
 import com.playtab.userservice.entity.enums.Role;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,16 @@ public class TokenService {
                 .expiration(Date.from(exp))
                 .signWith(key)
                 .compact();
+    }
+
+    public UUID parseAccessIdentityId(String accessToken) {
+        Claims c = Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(accessToken)
+                .getPayload();
+
+        return UUID.fromString(c.getSubject());
     }
 
     public long accessTtlSeconds() {
