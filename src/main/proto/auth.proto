@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package playtab.user.v1;
+option java_multiple_files = true;
+option java_package = "com.playtab.userservice.proto.v1";
+
+import "google/protobuf/timestamp.proto";
+
+service AuthService {
+  // [MEM01_LOGIN01] 이메일 로그인
+  rpc LoginWithEmail(LoginWithEmailRequest) returns (AuthTokensResponse);
+
+  // [MEM01_SNSLOGIN02] 소셜 로그인(OIDC) 결과로 federation 처리
+  rpc LoginWithSocial(LoginWithSocialRequest) returns (AuthTokensResponse);
+
+  // Access 만료 시 재발급 (Refresh 기반)
+  rpc RefreshTokens(RefreshTokensRequest) returns (AuthTokensResponse);
+
+  // [MYP01_ACCOUNT03] 로그아웃(해당 세션 revoke)
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // 선택: 내 인증 요약(상태/role)
+  rpc GetMyAuthSummary(GetMyAuthSummaryRequest) returns (MyAuthSummaryResponse);
+}
+
+enum CredentialType {
+  CREDENTIAL_TYPE_UNSPECIFIED = 0;
+  EMAIL = 1;
+  GOOGLE = 2;
+  KAKAO = 3;
+  NAVER = 4;
+  APPLE = 5;
+}
+
+message LoginWithEmailRequest {
+  string email = 1;
+  string password = 2;
+  ClientContext client = 3;
+}
+
+message LoginWithSocialRequest {
+  CredentialType type = 1;     // GOOGLE/KAKAO/NAVER/APPLE
+  string id_token = 2;         // OIDC면 id_token 권장
+  string access_token = 3;     // OAuth2만 있으면 access_token 사용(옵션)
+  ClientContext client = 4;
+}
+
+message RefreshTokensRequest {
+  string refresh_token = 1;
+  ClientContext client = 2;    // 선택: 디바이스 검증 강화 시 사용
+}
+
+message LogoutRequest {
+  string refresh_token = 1;    // 어떤 세션을 revoke할지 식별
+}
+
+message LogoutResponse {
+  bool success = 1;
+}
+
+message AuthTokensResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+
+  // 프론트/BFF가 UX 처리하기 좋게
+  int64 access_expires_in_seconds = 3;
+  int64 refresh_expires_in_seconds = 4;
+
+  // 이후 화면 분기용(신규/기존) 옵션
+  bool profile_completed = 5;
+}
+
+message GetMyAuthSummaryRequest {}
+
+message MyAuthSummaryResponse {
+  string identity_id = 1;
+  string role = 2;     // auth_identities.role
+  string status = 3;   // auth_identities.status
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message ClientContext {
+  string device_fingerprint = 1;
+  string user_agent = 2;
+  string ip_address = 3;
+}
