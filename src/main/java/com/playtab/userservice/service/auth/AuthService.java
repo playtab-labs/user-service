@@ -148,8 +148,7 @@ public class AuthService {
     }
 
     private boolean isProfileCompleted(UserProfile p) {
-        // 너 서비스 정책에 맞게 조정
         return p.getEmail() != null && !p.getEmail().isBlank()
-                && p.getNickname() != null && !p.getNickname().isBlank();
+                && p.getName() != null && !p.getName().isBlank();
     }
 }

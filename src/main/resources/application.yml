@@ -14,7 +14,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update #prod 환경에서는 변경해야함
+      ddl-auto: update  # 운영에서는 validate | none
     properties:
       hibernate:
         format_sql: true
@@ -24,6 +24,31 @@ spring:
     enabled: true
     baseline-on-migrate: true
     locations: classpath:db/migration
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+email-verification:
+  ttl-seconds: ${EMAIL_VERIFY_TTL_SECONDS:600}  # 메일 인증 지속 시간:인증 성공 후 최대 10분 내로 회원가입 완료해야함
+  max-attempts: ${EMAIL_VERIFY_MAX_ATTEMPTS:5}
+  resend-cooldown-seconds: ${EMAIL_VERIFY_RESEND_COOLDOWN_SECONDS:30}  # 인증번호 재발송 최소 대기시간
+  from: ${EMAIL_FROM:no-reply@playtab.com}
+
+auth:
+  login:
+    max-failures: ${AUTH_LOGIN_MAX_FAILURES:5}
+    lock-minutes: ${AUTH_LOGIN_LOCK_MINUTES:15}
 
 jwt:
   secret: ${JWT_SECRET:test_secret_test_secret_test_secret_test_secret_1234}

@@ -1,5 +1,6 @@
 package com.playtab.userservice.entity;
 
+import com.playtab.userservice.entity.enums.Gender;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -27,8 +28,9 @@ public class UserProfile {
     @Column(name = "name", length = 100)
     private String name;
 
-    @Column(name = "nickname", length = 100, unique = false)
-    private String nickname;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", nullable = false, length = 20)
+    private Gender gender = Gender.UNSPECIFIED; // ✅ 기본값
 
     @Column(name = "phone_number", length = 30)
     private String phoneNumber;
@@ -52,5 +54,6 @@ public class UserProfile {
     void prePersist() {
         if (profileId == null) profileId = UUID.randomUUID();
         if (createdAt == null) createdAt = Instant.now();
+        if (gender == null) gender = Gender.UNSPECIFIED;
     }
 }
