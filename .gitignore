@@ -5,7 +5,9 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-### STS ###
+.env
+
+### type .gitignoreSTS ###
 .apt_generated
 .classpath
 .factorypath
