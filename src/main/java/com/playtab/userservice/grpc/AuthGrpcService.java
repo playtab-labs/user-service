@@ -4,9 +4,11 @@ import com.playtab.userservice.dto.auth.AuthTokens;
 import com.playtab.userservice.dto.auth.LoginCommand;
 import com.playtab.userservice.dto.auth.LogoutCommand;
 import com.playtab.userservice.dto.auth.RefreshCommand;
+import com.playtab.userservice.dto.auth.SocialLoginCommand;
 import com.playtab.userservice.exception.GrpcExceptionMapper;
-import com.playtab.userservice.proto.v1.*;
 import com.playtab.userservice.service.auth.AuthService;
+import com.playtab.userservice.entity.enums.CredentialType;
+import com.playtab.userservice.proto.v1.*;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -30,6 +32,27 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                     .build();
 
             AuthTokens tokens = authService.loginWithEmail(cmd);
+
+            responseObserver.onNext(toAuthTokensResponse(tokens));
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(exceptionMapper.toStatus(e));
+        }
+    }
+
+    @Override
+    public void loginWithSocial(LoginWithSocialRequest request, StreamObserver<AuthTokensResponse> responseObserver) {
+        try {
+            SocialLoginCommand cmd = SocialLoginCommand.builder()
+                    .type(mapCredentialType(request.getType()))
+                    .idToken(request.getIdToken())
+                    .accessToken(request.getAccessToken())
+                    .deviceFingerprint(request.hasClient() ? request.getClient().getDeviceFingerprint() : null)
+                    .userAgent(request.hasClient() ? request.getClient().getUserAgent() : null)
+                    .ipAddress(request.hasClient() ? request.getClient().getIpAddress() : null)
+                    .build();
+
+            AuthTokens tokens = authService.loginWithSocial(cmd);
 
             responseObserver.onNext(toAuthTokensResponse(tokens));
             responseObserver.onCompleted();
@@ -83,4 +106,22 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                 .build();
     }
 
+    private CredentialType mapCredentialType(
+            com.playtab.userservice.proto.v1.CredentialType t
+    ) {
+        return switch (t) {
+            case GOOGLE -> CredentialType.GOOGLE;
+            case NAVER  -> CredentialType.NAVER;
+            case KAKAO  -> CredentialType.KAKAO;
+
+            case EMAIL, CREDENTIAL_TYPE_UNSPECIFIED, UNRECOGNIZED ->
+                    throw new com.playtab.userservice.exception.DomainException(
+                            com.playtab.userservice.exception.ErrorCode.UNSUPPORTED_SOCIAL_PROVIDER
+                    );
+
+            default -> throw new com.playtab.userservice.exception.DomainException(
+                    com.playtab.userservice.exception.ErrorCode.UNSUPPORTED_SOCIAL_PROVIDER
+            );
+        };
+    }
 }

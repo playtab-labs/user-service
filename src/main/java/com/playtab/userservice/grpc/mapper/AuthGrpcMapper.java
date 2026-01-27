@@ -49,7 +49,7 @@ public class AuthGrpcMapper {
         return Timestamp.newBuilder().setSeconds(i.getEpochSecond()).setNanos(i.getNano()).build();
     }
 
-    // refreshTokens용 간단 DTO (원하면 패키지 밖으로 빼도 됨)
+    // refreshTokens용 간단 DTO
     public record ClientMeta(String deviceFingerprint, String userAgent, String ipAddress) {}
     public record MyAuthSummary(java.util.UUID identityId, String role, String status, Instant createdAt) {}
 }

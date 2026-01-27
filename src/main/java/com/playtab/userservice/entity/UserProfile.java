@@ -30,7 +30,7 @@ public class UserProfile {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "gender", nullable = false, length = 20)
-    private Gender gender = Gender.UNSPECIFIED; // ✅ 기본값
+    private Gender gender = Gender.UNSPECIFIED;
 
     @Column(name = "phone_number", length = 30)
     private String phoneNumber;
