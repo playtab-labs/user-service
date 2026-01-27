@@ -1,6 +1,6 @@
 # PlayTab User Service
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/6e1a9189-4433-454a-831e-0f25023012ec" width="150" style="margin-right:16px;" />
+  <img src="https://github.com/user-attachments/assets/6e1a9189-4433-454a-831e-0f25023012ec" width="150" style="margin-right:150px;" />
   <img src="https://github.com/user-attachments/assets/141c91c9-5950-4d0c-aeb2-fc785ca3df69" width="150" />
 </p>
 
