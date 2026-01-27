@@ -10,6 +10,11 @@ public enum ErrorCode {
     UNAUTHENTICATED("UNAUTHENTICATED", "Authentication required."),
     FORBIDDEN("FORBIDDEN", "No permission."),
 
+    // Social login
+    INVALID_SOCIAL_TOKEN("INVALID_SOCIAL_TOKEN", "Invalid social token."),
+    UNSUPPORTED_SOCIAL_PROVIDER("UNSUPPORTED_SOCIAL_PROVIDER", "Unsupported social provider."),
+    SOCIAL_EMAIL_REQUIRED("SOCIAL_EMAIL_REQUIRED", "Email is required for social login."),
+
     // Refresh/session
     INVALID_REFRESH_TOKEN("INVALID_REFRESH_TOKEN", "Invalid refresh token."),
     REFRESH_TOKEN_EXPIRED("REFRESH_TOKEN_EXPIRED", "Refresh token expired."),

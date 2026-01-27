@@ -36,7 +36,9 @@ public class AuthConsent {
 
     @PrePersist
     void prePersist() {
-        if (agreedAt == null) agreedAt = Instant.now();
         if (isAgreed == null) isAgreed = false;
+        if (Boolean.TRUE.equals(isAgreed) && agreedAt == null) {
+            agreedAt = Instant.now();
+        }
     }
 }

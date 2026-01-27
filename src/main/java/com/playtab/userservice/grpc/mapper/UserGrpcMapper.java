@@ -22,7 +22,6 @@ public class UserGrpcMapper {
                 .email(req.getEmail())
                 .password(req.getPassword())
                 .name(blankToNull(req.getName()))
-                // ✅ Gender 매핑 추가
                 .gender(mapGender(req.getGender()))
                 .phoneNumber(blankToNull(req.getPhoneNumber()))
                 .birthDate(parseDate(req.getBirthDate()))
@@ -44,7 +43,6 @@ public class UserGrpcMapper {
                 blankToNull(req.getPhoneNumber()),
                 parseDate(req.getBirthDate()),
                 blankToNull(req.getNationality()),
-                // ✅ 순서 수정 (ProfilePatch 생성자 파라미터 순서 확인)
                 mapGender(req.getGender())
         );
     }
@@ -55,7 +53,6 @@ public class UserGrpcMapper {
                 .setProfileId(p.getProfileId().toString())
                 .setEmail(nvl(p.getEmail()))
                 .setName(nvl(p.getName()))
-                // ✅ Gender 응답 추가
                 .setGender(mapGenderProto(p.getGender()))
                 .setPhoneNumber(nvl(p.getPhoneNumber()))
                 .setBirthDate(p.getBirthDate() == null ? "" : p.getBirthDate().toString())
@@ -65,7 +62,6 @@ public class UserGrpcMapper {
                 .build();
     }
 
-    // ✅ 추가: Proto Enum -> Entity Enum 변환
     private Gender mapGender(com.playtab.userservice.proto.v1.Gender g) {
         if (g == null) return Gender.UNSPECIFIED;
         return switch (g) {
@@ -76,7 +72,6 @@ public class UserGrpcMapper {
         };
     }
 
-    // ✅ 추가: Entity Enum -> Proto Enum 변환
     private com.playtab.userservice.proto.v1.Gender mapGenderProto(Gender g) {
         if (g == null) return com.playtab.userservice.proto.v1.Gender.GENDER_UNSPECIFIED;
         return switch (g) {
@@ -108,7 +103,6 @@ public class UserGrpcMapper {
     private String blankToNull(String s) { return (s == null || s.isBlank()) ? null : s; }
     private String nvl(String s) { return s == null ? "" : s; }
 
-    // ✅ private -> public 변경 (UserGrpcService에서 접근 가능하도록)
     public Timestamp toTs(Instant i) {
         if (i == null) return Timestamp.getDefaultInstance();
         return Timestamp.newBuilder().setSeconds(i.getEpochSecond()).setNanos(i.getNano()).build();

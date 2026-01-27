@@ -59,3 +59,7 @@ grpc:
   server:
     port: 9090
     reflection-service-enabled: true
+
+oauth:
+  google:
+    client-id: ${OAUTH_GOOGLE_CLIENT_ID}
