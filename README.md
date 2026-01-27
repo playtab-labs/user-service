@@ -1,7 +1,7 @@
 # PlayTab User Service
 <p align="center">
-<img src="https://github.com/user-attachments/assets/6e1a9189-4433-454a-831e-0f25023012ec" width="240" />
-<img src="https://github.com/user-attachments/assets/141c91c9-5950-4d0c-aeb2-fc785ca3df69" width="240" />
+  <img src="https://github.com/user-attachments/assets/6e1a9189-4433-454a-831e-0f25023012ec" width="150" style="margin-right:16px;" />
+  <img src="https://github.com/user-attachments/assets/141c91c9-5950-4d0c-aeb2-fc785ca3df69" width="150" />
 </p>
 
 PlayTab은 RFID 기반 입장 시스템과 클라우드 플랫폼을 결합해  
