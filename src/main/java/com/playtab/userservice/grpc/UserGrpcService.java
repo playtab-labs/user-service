@@ -1,18 +1,18 @@
 package com.playtab.userservice.grpc;
 
-import com.google.protobuf.Timestamp;
 import com.playtab.userservice.dto.user.SignupCommand;
 import com.playtab.userservice.entity.UserProfile;
 import com.playtab.userservice.exception.GrpcExceptionMapper;
 import com.playtab.userservice.grpc.interceptor.AuthContextKeys;
+import com.playtab.userservice.grpc.mapper.UserGrpcMapper;
 import com.playtab.userservice.proto.v1.*;
 import com.playtab.userservice.repository.UserProfileRepository;
 import com.playtab.userservice.service.user.UserSignupService;
+import com.playtab.userservice.service.user.email.EmailVerificationService;
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
+import org.springframework.transaction.annotation.Transactional; // ✅ 추가
 
-import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
 @GrpcService
@@ -20,20 +20,30 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
 
     private final UserSignupService signupService;
     private final UserProfileRepository profileRepo;
+    private final UserGrpcMapper mapper;
     private final GrpcExceptionMapper ex;
+    private final EmailVerificationService emailVerificationService;
 
-    public UserGrpcService(UserSignupService signupService, UserProfileRepository profileRepo, GrpcExceptionMapper ex) {
+    public UserGrpcService(UserSignupService signupService,
+                           UserProfileRepository profileRepo,
+                           UserGrpcMapper mapper,
+                           GrpcExceptionMapper ex,
+                           EmailVerificationService emailVerificationService) {
         this.signupService = signupService;
         this.profileRepo = profileRepo;
+        this.mapper = mapper;
         this.ex = ex;
+        this.emailVerificationService = emailVerificationService;
     }
 
     @Override
+    @Transactional // ✅ 트랜잭션을 걸어 응답 빌드 시점까지 세션을 유지합니다.
     public void signUpWithEmail(SignUpWithEmailRequest request, StreamObserver<SignUpResponse> responseObserver) {
         try {
-            SignupCommand cmd = toSignupCommand(request);
+            SignupCommand cmd = mapper.toSignupCommand(request);
             UUID identityId = signupService.signUpWithEmail(cmd);
 
+            // 트랜잭션 안에서 조회하므로 profile.getIdentity() 접근 시 세션이 살아있습니다.
             UserProfile profile = profileRepo.findByIdentity_IdentityId(identityId)
                     .orElseThrow(() -> new RuntimeException("Profile not found after signup"));
 
@@ -41,7 +51,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
                     .setIdentityId(identityId.toString())
                     .setProfileId(profile.getProfileId().toString())
                     .setProfileCompleted(isProfileCompleted(profile))
-                    .setCreatedAt(toTs(Instant.now()))
+                    .setCreatedAt(mapper.toTs(profile.getIdentity().getCreatedAt()))
                     .build());
             responseObserver.onCompleted();
         } catch (Exception e) {
@@ -50,6 +60,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     }
 
     @Override
+    @Transactional(readOnly = true) // ✅ 조회 전용 트랜잭션 추가
     public void getMyProfile(GetMyProfileRequest request, StreamObserver<UserProfileResponse> responseObserver) {
         try {
             UUID identityId = AuthContextKeys.IDENTITY_ID.get();
@@ -58,7 +69,8 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
             UserProfile profile = profileRepo.findByIdentity_IdentityId(identityId)
                     .orElseThrow(() -> new RuntimeException("Profile not found"));
 
-            responseObserver.onNext(toUserProfileResponse(profile));
+            // mapper 안에서 p.getIdentity() 등을 호출해도 세션이 있어 안전합니다.
+            responseObserver.onNext(mapper.toUserProfileResponse(profile));
             responseObserver.onCompleted();
         } catch (Exception e) {
             responseObserver.onError(ex.toStatus(e));
@@ -66,84 +78,52 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     }
 
     @Override
-    public void updateMyProfile(UpdateMyProfileRequest request, StreamObserver<UserProfileResponse> responseObserver) {
-        responseObserver.onError(io.grpc.Status.UNIMPLEMENTED
-                .withDescription("UpdateMyProfile will be implemented in Step5.")
-                .asRuntimeException());
+    public void sendEmailVerificationCode(SendEmailVerificationCodeRequest request,
+                                          StreamObserver<SendEmailVerificationCodeResponse> responseObserver) {
+        try {
+            long ttl = emailVerificationService.sendCode(request.getEmail(), request.getSessionId());
+            responseObserver.onNext(SendEmailVerificationCodeResponse.newBuilder()
+                    .setSuccess(true)
+                    .setTtlSeconds(ttl)
+                    .build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
     }
 
     @Override
-    public void updateConsents(UpdateConsentsRequest request, StreamObserver<UpdateConsentsResponse> responseObserver) {
-        responseObserver.onError(io.grpc.Status.UNIMPLEMENTED
-                .withDescription("UpdateConsents will be implemented in Step5.")
-                .asRuntimeException());
-    }
-
-    @Override
-    public void verifyAdult(VerifyAdultRequest request, StreamObserver<VerifyAdultResponse> responseObserver) {
-        responseObserver.onError(io.grpc.Status.UNIMPLEMENTED
-                .withDescription("VerifyAdult will be implemented in Step5.")
-                .asRuntimeException());
-    }
-
-    // -------- mapping helpers --------
-
-    private SignupCommand toSignupCommand(SignUpWithEmailRequest req) {
-        return SignupCommand.builder()
-                .email(req.getEmail())
-                .password(req.getPassword())
-                .name(blankToNull(req.getName()))
-                .nickname(blankToNull(req.getNickname()))
-                .phoneNumber(blankToNull(req.getPhoneNumber()))
-                .birthDate(req.getBirthDate().isBlank() ? null : LocalDate.parse(req.getBirthDate()))
-                .nationality(blankToNull(req.getNationality()))
-                .consents(req.getConsentsList().stream().map(c ->
-                        SignupCommand.Consent.builder()
-                                .termsVersion(c.getTermsVersion())
-                                .type(mapConsentType(c.getType()))
-                                .isAgreed(c.getIsAgreed())
-                                .build()
-                ).toList())
-                .build();
-    }
-
-    private com.playtab.userservice.entity.enums.ConsentType mapConsentType(com.playtab.userservice.proto.v1.ConsentType t) {
-        return switch (t) {
-            case PRIVACY -> com.playtab.userservice.entity.enums.ConsentType.PRIVACY;
-            case SERVICE -> com.playtab.userservice.entity.enums.ConsentType.SERVICE;
-            case MARKETING -> com.playtab.userservice.entity.enums.ConsentType.MARKETING;
-            default -> com.playtab.userservice.entity.enums.ConsentType.SERVICE;
-        };
-    }
-
-    private UserProfileResponse toUserProfileResponse(UserProfile p) {
-        // ⚠️ updatedAt 필드명이 너 엔티티에서 다를 수 있음
-        Instant updated = p.getUpdatedAt(); // ✅ UserProfile에 updatedAt 있어야 함 (SQL 기준)
-
-        return UserProfileResponse.newBuilder()
-                .setIdentityId(p.getIdentity().getIdentityId().toString())
-                .setProfileId(p.getProfileId().toString())
-                .setEmail(nvl(p.getEmail()))
-                .setName(nvl(p.getName()))
-                .setNickname(nvl(p.getNickname()))
-                .setPhoneNumber(nvl(p.getPhoneNumber()))
-                .setBirthDate(p.getBirthDate() == null ? "" : p.getBirthDate().toString())
-                .setIsAdult(Boolean.TRUE.equals(p.getIsAdult()))
-                .setNationality(nvl(p.getNationality()))
-                .setUpdatedAt(toTs(updated))
-                .build();
+    public void verifyEmailCode(VerifyEmailCodeRequest request,
+                                StreamObserver<VerifyEmailCodeResponse> responseObserver) {
+        try {
+            boolean ok = emailVerificationService.verifyCode(request.getEmail(), request.getCode(), request.getSessionId());
+            responseObserver.onNext(VerifyEmailCodeResponse.newBuilder()
+                    .setSuccess(true)
+                    .setVerified(ok)
+                    .build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
     }
 
     private boolean isProfileCompleted(UserProfile p) {
         return p.getEmail() != null && !p.getEmail().isBlank()
-                && p.getNickname() != null && !p.getNickname().isBlank();
+                && p.getName() != null && !p.getName().isBlank();
     }
 
-    private String blankToNull(String s) { return (s == null || s.isBlank()) ? null : s; }
-    private String nvl(String s) { return s == null ? "" : s; }
+    @Override
+    public void updateMyProfile(UpdateMyProfileRequest request, StreamObserver<UserProfileResponse> responseObserver) {
+        responseObserver.onError(io.grpc.Status.UNIMPLEMENTED.asRuntimeException());
+    }
 
-    private Timestamp toTs(Instant i) {
-        if (i == null) return Timestamp.getDefaultInstance();
-        return Timestamp.newBuilder().setSeconds(i.getEpochSecond()).setNanos(i.getNano()).build();
+    @Override
+    public void updateConsents(UpdateConsentsRequest request, StreamObserver<UpdateConsentsResponse> responseObserver) {
+        responseObserver.onError(io.grpc.Status.UNIMPLEMENTED.asRuntimeException());
+    }
+
+    @Override
+    public void verifyAdult(VerifyAdultRequest request, StreamObserver<VerifyAdultResponse> responseObserver) {
+        responseObserver.onError(io.grpc.Status.UNIMPLEMENTED.asRuntimeException());
     }
 }

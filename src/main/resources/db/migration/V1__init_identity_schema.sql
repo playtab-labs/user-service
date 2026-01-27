@@ -14,17 +14,23 @@ CREATE TABLE IF NOT EXISTS auth_identities (
 CREATE TABLE IF NOT EXISTS user_profiles (
                                              profile_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     identity_id   UUID NOT NULL,
+
     email         VARCHAR(255),
     name          VARCHAR(100),
-    nickname      VARCHAR(50),
+    gender        VARCHAR(20) NOT NULL DEFAULT 'UNSPECIFIED',
     phone_number  VARCHAR(20),
     birth_date    DATE,
     is_adult      BOOLEAN DEFAULT FALSE,
     nationality   VARCHAR(10) DEFAULT 'KR',
+
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
     updated_at    TIMESTAMPTZ DEFAULT NOW(),
+
     CONSTRAINT fk_profiles_identity
     FOREIGN KEY (identity_id) REFERENCES auth_identities(identity_id) ON DELETE CASCADE,
-    CONSTRAINT uq_profiles_identity_id UNIQUE(identity_id)
+    CONSTRAINT uq_profiles_identity_id UNIQUE(identity_id),
+
+    CONSTRAINT ck_profiles_gender CHECK (gender IN ('UNSPECIFIED','MALE','FEMALE','OTHER'))
     );
 
 -- 3) credentials

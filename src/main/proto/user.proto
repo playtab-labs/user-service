@@ -7,65 +7,61 @@ option java_package = "com.playtab.userservice.proto.v1";
 import "google/protobuf/timestamp.proto";
 
 service UserService {
-  // [MEM01_SIGNUP03] 회원가입(EMAIL 기준)
   rpc SignUpWithEmail(SignUpWithEmailRequest) returns (SignUpResponse);
-
-  // [MYP01_PROFILE01] 내 프로필 조회
   rpc GetMyProfile(GetMyProfileRequest) returns (UserProfileResponse);
-
-  // [MYP01_PROFILE01] 내 프로필 수정
   rpc UpdateMyProfile(UpdateMyProfileRequest) returns (UserProfileResponse);
-
-  // [MEM01_LANG05]/[MYP01_SETTING02] 동의/설정 저장(마케팅 등)
   rpc UpdateConsents(UpdateConsentsRequest) returns (UpdateConsentsResponse);
-
-  // [AGE01_LOCAL01] 성인 인증 결과 반영(외부 PASS 결과를 BFF가 전달)
   rpc VerifyAdult(VerifyAdultRequest) returns (VerifyAdultResponse);
+  rpc SendEmailVerificationCode(SendEmailVerificationCodeRequest) returns (SendEmailVerificationCodeResponse);
+  rpc VerifyEmailCode(VerifyEmailCodeRequest) returns (VerifyEmailCodeResponse);
+}
+
+enum Gender {
+  GENDER_UNSPECIFIED = 0;
+  MALE = 1;
+  FEMALE = 2;
+  OTHER = 3;
 }
 
 message SignUpWithEmailRequest {
   string email = 1;
   string password = 2;
   string name = 3;
-  string nickname = 4;
-  string phone_number = 5; // E.164
-  string birth_date = 6;   // "YYYY-MM-DD" (proto Date 미사용 간단버전)
-  string nationality = 7;  // default KR 는 서버에서 처리 가능
-
-  repeated ConsentInput consents = 8; //리스트 형식으로 저장, UserSignupService에서 이 리스트를 순회하며 auth_consents에 저장
+  Gender gender = 4;
+  string phone_number = 5;
+  string birth_date = 6;
+  string nationality = 7;
+  string session_id = 8;
+  repeated ConsentInput consents = 9;
 }
 
 message SignUpResponse {
   string identity_id = 1;
   string profile_id = 2;
-  bool profile_completed = 3; //필수 정보 다 채워졌는가
+  bool profile_completed = 3;
   google.protobuf.Timestamp created_at = 4;
 }
 
 message GetMyProfileRequest {}
 
 message UpdateMyProfileRequest {
-  // patch 스타일 (빈 값이면 무시) - proto3 optional 사용 가능하지만 간단 버전
   string name = 1;
-  string nickname = 2;
+  Gender gender = 2;
   string phone_number = 3;
-  string birth_date = 4;      // "YYYY-MM-DD"
+  string birth_date = 4;
   string nationality = 5;
 }
 
 message UserProfileResponse {
   string identity_id = 1;
   string profile_id = 2;
-
   string email = 3;
   string name = 4;
-  string nickname = 5;
+  Gender gender = 5;
   string phone_number = 6;
-
   string birth_date = 7;
   bool is_adult = 8;
   string nationality = 9;
-
   google.protobuf.Timestamp updated_at = 10;
 }
 
@@ -77,7 +73,7 @@ enum ConsentType {
 }
 
 message ConsentInput {
-  string terms_version = 1; // "v1.0"
+  string terms_version = 1;
   ConsentType type = 2;
   bool is_agreed = 3;
 }
@@ -91,11 +87,31 @@ message UpdateConsentsResponse {
 }
 
 message VerifyAdultRequest {
-  // PASS 등 외부 인증 완료 후 BFF가 호출
-  bool is_adult = 1; // 보통 true
+  bool is_adult = 1;
 }
 
 message VerifyAdultResponse {
   bool success = 1;
   bool is_adult = 2;
+}
+
+message SendEmailVerificationCodeRequest {
+  string email = 1;
+  string session_id = 2;
+}
+
+message SendEmailVerificationCodeResponse {
+  bool success = 1;
+  int64 ttl_seconds = 2;
+}
+
+message VerifyEmailCodeRequest {
+  string email = 1;
+  string code = 2;
+  string session_id = 3;
+}
+
+message VerifyEmailCodeResponse {
+  bool success = 1;
+  bool verified = 2;
 }

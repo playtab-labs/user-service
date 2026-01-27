@@ -31,7 +31,7 @@ public class AuthConsent {
     @Column(name = "is_agreed", nullable = false)
     private Boolean isAgreed;
 
-    @Column(name = "agreed_at") // ✅ SQL 기준이 agreed_at이면 이게 맞음
+    @Column(name = "agreed_at")
     private Instant agreedAt;
 
     @PrePersist

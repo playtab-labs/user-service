@@ -6,12 +6,14 @@ import com.playtab.userservice.entity.AuthCredential;
 import com.playtab.userservice.entity.AuthIdentity;
 import com.playtab.userservice.entity.UserProfile;
 import com.playtab.userservice.entity.enums.CredentialType;
+import com.playtab.userservice.entity.enums.Gender;
 import com.playtab.userservice.exception.DomainException;
 import com.playtab.userservice.exception.ErrorCode;
 import com.playtab.userservice.repository.AuthCredentialRepository;
 import com.playtab.userservice.repository.AuthIdentityRepository;
 import com.playtab.userservice.repository.UserProfileRepository;
 import com.playtab.userservice.service.auth.PasswordService;
+import com.playtab.userservice.service.user.email.EmailVerificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,38 +26,43 @@ public class UserSignupService {
     private final AuthCredentialRepository credentialRepo;
     private final UserProfileRepository profileRepo;
     private final PasswordService passwordService;
+    private final EmailVerificationService emailVerificationService;
 
     public UserSignupService(
             AuthIdentityRepository identityRepo,
             AuthCredentialRepository credentialRepo,
             UserProfileRepository profileRepo,
-            PasswordService passwordService
+            PasswordService passwordService,
+            EmailVerificationService emailVerificationService
     ) {
         this.identityRepo = identityRepo;
         this.credentialRepo = credentialRepo;
         this.profileRepo = profileRepo;
         this.passwordService = passwordService;
+        this.emailVerificationService = emailVerificationService;
     }
 
     @Transactional
     public UUID signUpWithEmail(SignupCommand cmd) {
 
-        // 이메일 중복 방어(최종 방어는 uq_credentials_type_identifier)
+        // 0) 이메일 인증 강제 (Redis verified 확인)
+        emailVerificationService.assertVerifiedOrThrow(cmd.email(), cmd.sessionId());
+
+        // 1) 이메일 중복 방어(최종 방어는 uq_credentials_type_identifier)
         if (credentialRepo.existsByTypeAndIdentifier(CredentialType.EMAIL, cmd.email())) {
             throw new DomainException(ErrorCode.DUPLICATE_EMAIL);
         }
 
-        // 닉네임 중복(스키마 unique 없으면 동시성 완전보장X)
-        if (cmd.nickname() != null && !cmd.nickname().isBlank()
-                && profileRepo.existsByNickname(cmd.nickname())) {
-            throw new DomainException(ErrorCode.DUPLICATE_NICKNAME);
-        }
+        // (nickname 제거했다면 이 블록은 삭제해야 함)
+        // if (cmd.nickname() != null && !cmd.nickname().isBlank()
+        //         && profileRepo.existsByNickname(cmd.nickname())) {
+        //     throw new DomainException(ErrorCode.DUPLICATE_NICKNAME);
+        // }
 
         AuthIdentity identity = new AuthIdentity();
-        // identityId는 @PrePersist에서 자동 생성되지만, 즉시 필요하면 여기서 미리 생성해도 됨
         identity.setIdentityId(UUID.randomUUID());
 
-        // Credential
+        // 2) Credential
         AuthCredential credential = new AuthCredential();
         credential.setType(CredentialType.EMAIL);
         credential.setIdentifier(cmd.email());
@@ -63,11 +70,11 @@ public class UserSignupService {
         credential.setIsPrimary(true);
         identity.addCredential(credential);
 
-        // Profile
+        // 3) Profile
         UserProfile profile = new UserProfile();
         profile.setEmail(cmd.email());
         profile.setName(cmd.name());
-        profile.setNickname(cmd.nickname());
+        profile.setGender(cmd.gender() != null ? cmd.gender() : Gender.UNSPECIFIED); // gender 추가
         profile.setPhoneNumber(cmd.phoneNumber());
         profile.setBirthDate(cmd.birthDate());
         profile.setNationality(
@@ -75,7 +82,7 @@ public class UserSignupService {
         );
         identity.attachProfile(profile);
 
-        // Consents
+        // 4) Consents
         if (cmd.consents() != null) {
             for (SignupCommand.Consent c : cmd.consents()) {
                 AuthConsent consent = new AuthConsent();
@@ -86,8 +93,12 @@ public class UserSignupService {
             }
         }
 
-        // ✅ 여기서 한 번만 저장하면 cascade로 전부 저장됨
+        // 5) 저장
         AuthIdentity saved = identityRepo.save(identity);
+
+        // 6) 회원가입 성공 시 인증 기록 소비(삭제) - return 전에 실행!
+        emailVerificationService.consumeVerified(cmd.email(), cmd.sessionId());
+
         return saved.getIdentityId();
     }
 }
