@@ -1,25 +1,17 @@
 syntax = "proto3";
 
-package playtab.user.v1;
+package playtab.userservice.v1;
 option java_multiple_files = true;
 option java_package = "com.playtab.userservice.proto.v1";
 
 import "google/protobuf/timestamp.proto";
+import "consent.proto";
 
 service AuthService {
-  // [MEM01_LOGIN01] 이메일 로그인
   rpc LoginWithEmail(LoginWithEmailRequest) returns (AuthTokensResponse);
-
-  // [MEM01_SNSLOGIN02] 소셜 로그인(OIDC) 결과로 federation 처리
   rpc LoginWithSocial(LoginWithSocialRequest) returns (AuthTokensResponse);
-
-  // Access 만료 시 재발급 (Refresh 기반)
   rpc RefreshTokens(RefreshTokensRequest) returns (AuthTokensResponse);
-
-  // [MYP01_ACCOUNT03] 로그아웃(해당 세션 revoke)
   rpc Logout(LogoutRequest) returns (LogoutResponse);
-
-  // 선택: 내 인증 요약(상태/role)
   rpc GetMyAuthSummary(GetMyAuthSummaryRequest) returns (MyAuthSummaryResponse);
 }
 
@@ -43,15 +35,18 @@ message LoginWithSocialRequest {
   string id_token = 2;         // OIDC면 id_token 권장
   string access_token = 3;     // OAuth2만 있으면 access_token 사용(옵션)
   ClientContext client = 4;
+
+  // ✅ 신규: 소셜 '최초 가입' 또는 '필수약관 미보유' 상태면 반드시 전달(서버에서 강제)
+  repeated ConsentInput consents = 5;
 }
 
 message RefreshTokensRequest {
   string refresh_token = 1;
-  ClientContext client = 2;    // 선택: 디바이스 검증 강화 시 사용
+  ClientContext client = 2;
 }
 
 message LogoutRequest {
-  string refresh_token = 1;    // 어떤 세션을 revoke할지 식별
+  string refresh_token = 1;
 }
 
 message LogoutResponse {
@@ -62,20 +57,21 @@ message AuthTokensResponse {
   string access_token = 1;
   string refresh_token = 2;
 
-  // 프론트/BFF가 UX 처리하기 좋게
   int64 access_expires_in_seconds = 3;
   int64 refresh_expires_in_seconds = 4;
 
-  // 이후 화면 분기용(신규/기존) 옵션
   bool profile_completed = 5;
+
+  // ✅ 권장: 프론트 분기용 (약관 화면 보내야 하는지)
+  bool required_consents_completed = 6;
 }
 
 message GetMyAuthSummaryRequest {}
 
 message MyAuthSummaryResponse {
   string identity_id = 1;
-  string role = 2;     // auth_identities.role
-  string status = 3;   // auth_identities.status
+  string role = 2;
+  string status = 3;
   google.protobuf.Timestamp created_at = 4;
 }
 

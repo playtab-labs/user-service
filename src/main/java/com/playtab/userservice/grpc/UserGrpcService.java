@@ -1,58 +1,51 @@
 package com.playtab.userservice.grpc;
 
 import com.playtab.userservice.dto.user.SignupCommand;
-import com.playtab.userservice.entity.AuthConsent;
-import com.playtab.userservice.entity.AuthIdentity;
 import com.playtab.userservice.entity.UserProfile;
 import com.playtab.userservice.entity.enums.Gender;
 import com.playtab.userservice.exception.GrpcExceptionMapper;
 import com.playtab.userservice.grpc.interceptor.AuthContextKeys;
+import com.playtab.userservice.grpc.mapper.SettingsGrpcMapper;
 import com.playtab.userservice.grpc.mapper.UserGrpcMapper;
 import com.playtab.userservice.proto.v1.*;
-import com.playtab.userservice.repository.AuthConsentRepository;
-import com.playtab.userservice.repository.AuthIdentityRepository;
-import com.playtab.userservice.repository.UserProfileRepository;
+import com.playtab.userservice.service.user.ConsentCommandService;
+import com.playtab.userservice.service.user.ConsentQueryService;
+import com.playtab.userservice.service.user.UserSettingsService;
 import com.playtab.userservice.service.user.UserSignupService;
 import com.playtab.userservice.service.user.email.EmailVerificationService;
 import io.grpc.stub.StreamObserver;
+import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.UUID;
 
 @GrpcService
+@RequiredArgsConstructor
 public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
 
     private final UserSignupService signupService;
-    private final UserProfileRepository profileRepo;
+    private final com.playtab.userservice.repository.UserProfileRepository profileRepo;
+
     private final UserGrpcMapper mapper;
+    private final SettingsGrpcMapper settingsMapper;
+
     private final GrpcExceptionMapper ex;
     private final EmailVerificationService emailVerificationService;
-    private final AuthIdentityRepository identityRepo;
-    private final AuthConsentRepository consentRepo;
 
-    public UserGrpcService(UserSignupService signupService,
-                           UserProfileRepository profileRepo,
-                           UserGrpcMapper mapper,
-                           GrpcExceptionMapper ex,
-                           EmailVerificationService emailVerificationService,
-                           AuthIdentityRepository identityRepo,
-                           AuthConsentRepository consentRepo) {
-        this.signupService = signupService;
-        this.profileRepo = profileRepo;
-        this.mapper = mapper;
-        this.ex = ex;
-        this.emailVerificationService = emailVerificationService;
-        this.identityRepo = identityRepo;
-        this.consentRepo = consentRepo;
-    }
+    private final UserSettingsService settingsService;
+    private final ConsentQueryService consentQueryService;
+    private final ConsentCommandService consentCommandService;
 
+    // ---------------------------
+    // Signup
+    // ---------------------------
     @Override
     @Transactional
-    public void signUpWithEmail(SignUpWithEmailRequest request, StreamObserver<SignUpResponse> responseObserver) {
+    public void signUpWithEmail(SignUpWithEmailRequest request,
+                                StreamObserver<SignUpResponse> responseObserver) {
         try {
             SignupCommand cmd = mapper.toSignupCommand(request);
             UUID identityId = signupService.signUpWithEmail(cmd);
@@ -72,12 +65,15 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
+    // ---------------------------
+    // Profile
+    // ---------------------------
     @Override
     @Transactional(readOnly = true)
-    public void getMyProfile(GetMyProfileRequest request, StreamObserver<UserProfileResponse> responseObserver) {
+    public void getMyProfile(GetMyProfileRequest request,
+                             StreamObserver<UserProfileResponse> responseObserver) {
         try {
-            UUID identityId = AuthContextKeys.IDENTITY_ID.get();
-            if (identityId == null) throw ex.unauthenticated();
+            UUID identityId = requireIdentityId();
 
             UserProfile profile = profileRepo.findByIdentity_IdentityId(identityId)
                     .orElseThrow(() -> new RuntimeException("Profile not found"));
@@ -91,29 +87,26 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
 
     @Override
     @Transactional
-    public void updateMyProfile(UpdateMyProfileRequest request, StreamObserver<UserProfileResponse> responseObserver) {
+    public void updateMyProfile(UpdateMyProfileRequest request,
+                                StreamObserver<UserProfileResponse> responseObserver) {
         try {
-            UUID identityId = AuthContextKeys.IDENTITY_ID.get();
-            if (identityId == null) throw ex.unauthenticated();
+            UUID identityId = requireIdentityId();
 
             UserProfile profile = profileRepo.findByIdentity_IdentityId(identityId)
                     .orElseThrow(() -> new RuntimeException("Profile not found"));
 
             boolean changed = false;
 
-            // name
             if (!request.getName().isBlank()) {
                 profile.setName(request.getName());
                 changed = true;
             }
 
-            // gender (proto default=GENDER_UNSPECIFIED면 업데이트 안 함)
             if (request.getGender() != com.playtab.userservice.proto.v1.Gender.GENDER_UNSPECIFIED) {
                 profile.setGender(mapGender(request.getGender()));
                 changed = true;
             }
 
-            // phone_number
             if (!request.getPhoneNumber().isBlank()) {
                 profile.setPhoneNumber(request.getPhoneNumber());
                 changed = true;
@@ -129,15 +122,12 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
                 }
             }
 
-            // nationality
             if (!request.getNationality().isBlank()) {
                 profile.setNationality(request.getNationality());
                 changed = true;
             }
 
-            if (changed) {
-                profileRepo.save(profile);
-            }
+            if (changed) profileRepo.save(profile);
 
             responseObserver.onNext(mapper.toUserProfileResponse(profile));
             responseObserver.onCompleted();
@@ -146,80 +136,39 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
+    // ---------------------------
+    // Consents (AuthConsent에 저장)
+    // ---------------------------
     @Override
     @Transactional
-    public void updateConsents(UpdateConsentsRequest request, StreamObserver<UpdateConsentsResponse> responseObserver) {
+    public void updateConsents(UpdateConsentsRequest request,
+                               StreamObserver<UpdateConsentsResponse> responseObserver) {
         try {
-            UUID identityId = AuthContextKeys.IDENTITY_ID.get();
-            if (identityId == null) throw ex.unauthenticated();
+            UUID identityId = requireIdentityId();
 
-            var inputs = request.getConsentsList();
-            if (inputs == null || inputs.isEmpty()) {
+            if (request.getConsentsList() == null || request.getConsentsList().isEmpty()) {
                 throw new IllegalArgumentException("consents is empty");
             }
 
-            AuthIdentity identity = identityRepo.findById(identityId)
-                    .orElseThrow(() -> new RuntimeException("Identity not found"));
-
-            Instant now = Instant.now();
-
-            for (var in : inputs) {
-                String termsVersion = in.getTermsVersion();
-                if (termsVersion == null || termsVersion.isBlank()) {
-                    throw new IllegalArgumentException("terms_version is required");
-                }
-
-                // ✅ proto -> entity enum (풀패키지로 고정)
-                com.playtab.userservice.entity.enums.ConsentType type = mapConsentType(in.getType());
-
-                // ✅ upsert
-                AuthConsent consent = consentRepo
-                        .findByIdentity_IdentityIdAndTypeAndTermsVersion(identityId, type, termsVersion)
-                        .orElseGet(() -> {
-                            AuthConsent c = new AuthConsent();
-                            c.setIdentity(identity);
-                            c.setTermsVersion(termsVersion);
-                            c.setType(type);
-                            return c;
-                        });
-
-                boolean agreed = in.getIsAgreed();
-                consent.setIsAgreed(agreed);
-
-                // agreed_at 정책:
-                // - true  -> now
-                // - false -> null (현재 비동의 상태 명확)
-                consent.setAgreedAt(agreed ? now : null);
-
-                consentRepo.save(consent);
-            }
+            // ✅ 비즈니스 로직은 서비스로 위임 (필수동의 false 금지 포함)
+            consentCommandService.upsertConsents(identityId, request.getConsentsList());
 
             responseObserver.onNext(UpdateConsentsResponse.newBuilder().setSuccess(true).build());
             responseObserver.onCompleted();
-
         } catch (Exception e) {
             responseObserver.onError(ex.toStatus(e));
         }
     }
 
-    private com.playtab.userservice.entity.enums.ConsentType mapConsentType(
-            com.playtab.userservice.proto.v1.ConsentType t
-    ) {
-        return switch (t) {
-            case PRIVACY -> com.playtab.userservice.entity.enums.ConsentType.PRIVACY;
-            case SERVICE -> com.playtab.userservice.entity.enums.ConsentType.SERVICE;
-            case MARKETING -> com.playtab.userservice.entity.enums.ConsentType.MARKETING;
-            case CONSENT_TYPE_UNSPECIFIED, UNRECOGNIZED ->
-                    throw new IllegalArgumentException("consent type is unspecified");
-        };
-    }
-
+    // ---------------------------
+    // Adult verify
+    // ---------------------------
     @Override
     @Transactional
-    public void verifyAdult(VerifyAdultRequest request, StreamObserver<VerifyAdultResponse> responseObserver) {
+    public void verifyAdult(VerifyAdultRequest request,
+                            StreamObserver<VerifyAdultResponse> responseObserver) {
         try {
-            UUID identityId = AuthContextKeys.IDENTITY_ID.get();
-            if (identityId == null) throw ex.unauthenticated();
+            UUID identityId = requireIdentityId();
 
             UserProfile profile = profileRepo.findByIdentity_IdentityId(identityId)
                     .orElseThrow(() -> new RuntimeException("Profile not found"));
@@ -229,7 +178,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
 
             responseObserver.onNext(VerifyAdultResponse.newBuilder()
                     .setSuccess(true)
-                    .setIsAdult(profile.getIsAdult())
+                    .setIsAdult(Boolean.TRUE.equals(profile.getIsAdult()))
                     .build());
             responseObserver.onCompleted();
         } catch (Exception e) {
@@ -237,6 +186,9 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
+    // ---------------------------
+    // Email Verification
+    // ---------------------------
     @Override
     public void sendEmailVerificationCode(SendEmailVerificationCodeRequest request,
                                           StreamObserver<SendEmailVerificationCodeResponse> responseObserver) {
@@ -265,6 +217,72 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         } catch (Exception e) {
             responseObserver.onError(ex.toStatus(e));
         }
+    }
+
+    // ---------------------------
+    // Settings (UserSettings 테이블)
+    // ---------------------------
+    @Override
+    @Transactional(readOnly = true)
+    public void getMySettings(GetMySettingsRequest request,
+                              StreamObserver<UserSettingsResponse> responseObserver) {
+        try {
+            UUID identityId = requireIdentityId();
+
+            var settings = settingsService.getOrCreate(identityId);
+            var marketing = consentQueryService.getLatestMarketing(identityId);
+
+            responseObserver.onNext(
+                    settingsMapper.toUserSettingsResponse(
+                            identityId,
+                            settings,
+                            marketing.agreed(),
+                            marketing.termsVersion()
+                    )
+            );
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
+    }
+
+    @Override
+    @Transactional
+    public void updateMySettings(UpdateMySettingsRequest request,
+                                 StreamObserver<UserSettingsResponse> responseObserver) {
+        try {
+            UUID identityId = requireIdentityId();
+
+            String locale = request.hasLocale() ? request.getLocale().getValue() : null;
+            Boolean pushEnabled = request.hasPushEnabled() ? request.getPushEnabled().getValue() : null;
+            Boolean emailEnabled = request.hasEmailNotificationsEnabled()
+                    ? request.getEmailNotificationsEnabled().getValue()
+                    : null;
+
+            var settings = settingsService.patch(identityId, locale, pushEnabled, emailEnabled);
+            var marketing = consentQueryService.getLatestMarketing(identityId);
+
+            responseObserver.onNext(
+                    settingsMapper.toUserSettingsResponse(
+                            identityId,
+                            settings,
+                            marketing.agreed(),
+                            marketing.termsVersion()
+                    )
+            );
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
+    }
+
+    // ---------------------------
+    // Helpers
+    // ---------------------------
+    private UUID requireIdentityId() {
+        UUID identityId = AuthContextKeys.IDENTITY_ID.get();
+        if (identityId == null) throw ex.unauthenticated();
+        return identityId;
     }
 
     private boolean isProfileCompleted(UserProfile p) {

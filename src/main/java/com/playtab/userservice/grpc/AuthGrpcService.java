@@ -5,9 +5,9 @@ import com.playtab.userservice.dto.auth.LoginCommand;
 import com.playtab.userservice.dto.auth.LogoutCommand;
 import com.playtab.userservice.dto.auth.RefreshCommand;
 import com.playtab.userservice.dto.auth.SocialLoginCommand;
+import com.playtab.userservice.entity.enums.CredentialType;
 import com.playtab.userservice.exception.GrpcExceptionMapper;
 import com.playtab.userservice.service.auth.AuthService;
-import com.playtab.userservice.entity.enums.CredentialType;
 import com.playtab.userservice.proto.v1.*;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +47,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                     .type(mapCredentialType(request.getType()))
                     .idToken(request.getIdToken())
                     .accessToken(request.getAccessToken())
+                    .consents(request.getConsentsList())
                     .deviceFingerprint(request.hasClient() ? request.getClient().getDeviceFingerprint() : null)
                     .userAgent(request.hasClient() ? request.getClient().getUserAgent() : null)
                     .ipAddress(request.hasClient() ? request.getClient().getIpAddress() : null)
@@ -106,22 +107,24 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                 .build();
     }
 
-    private CredentialType mapCredentialType(
-            com.playtab.userservice.proto.v1.CredentialType t
-    ) {
+    private CredentialType mapCredentialType(com.playtab.userservice.proto.v1.CredentialType t) {
+        if (t == null) {
+            throw new com.playtab.userservice.exception.DomainException(
+                    com.playtab.userservice.exception.ErrorCode.UNSUPPORTED_SOCIAL_PROVIDER
+            );
+        }
+
         return switch (t) {
             case GOOGLE -> CredentialType.GOOGLE;
             case NAVER  -> CredentialType.NAVER;
             case KAKAO  -> CredentialType.KAKAO;
+            case APPLE  -> CredentialType.APPLE;
 
             case EMAIL, CREDENTIAL_TYPE_UNSPECIFIED, UNRECOGNIZED ->
                     throw new com.playtab.userservice.exception.DomainException(
                             com.playtab.userservice.exception.ErrorCode.UNSUPPORTED_SOCIAL_PROVIDER
                     );
-
-            default -> throw new com.playtab.userservice.exception.DomainException(
-                    com.playtab.userservice.exception.ErrorCode.UNSUPPORTED_SOCIAL_PROVIDER
-            );
         };
     }
+
 }

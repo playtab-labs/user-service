@@ -29,6 +29,11 @@ public enum ErrorCode {
     DUPLICATE_NICKNAME("DUPLICATE_NICKNAME", "Nickname already exists."),
     PROFILE_NOT_FOUND("PROFILE_NOT_FOUND", "Profile not found."),
 
+    // ✅ Consent / Terms
+    REQUIRED_CONSENT_MISSING("REQUIRED_CONSENT_MISSING", "Required consents (SERVICE/PRIVACY) must be agreed."),
+    TERMS_VERSION_REQUIRED("TERMS_VERSION_REQUIRED", "terms_version is required."),
+    CONSENT_TYPE_UNSPECIFIED("CONSENT_TYPE_UNSPECIFIED", "consent type is unspecified."),
+
     // ---------- Email Verification ----------
     INVALID_EMAIL("INVALID_EMAIL", "Invalid email."),
     EMAIL_VERIFICATION_NOT_FOUND("EMAIL_VERIFICATION_NOT_FOUND", "Verification code not found."),
