@@ -24,6 +24,9 @@ service UserService {
 
   rpc GetMySettings(GetMySettingsRequest) returns (UserSettingsResponse);
   rpc UpdateMySettings(UpdateMySettingsRequest) returns (UserSettingsResponse);
+
+  rpc ChangeMyPassword(ChangeMyPasswordRequest) returns (ChangeMyPasswordResponse);
+  rpc WithdrawMyAccount(WithdrawMyAccountRequest) returns (WithdrawMyAccountResponse);
 }
 
 /* ---------- Settings ---------- */
@@ -136,4 +139,21 @@ message VerifyEmailCodeRequest {
 message VerifyEmailCodeResponse {
   bool success = 1;
   bool verified = 2;
+}
+
+message ChangeMyPasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}
+
+message ChangeMyPasswordResponse {
+  bool success = 1;
+}
+
+message WithdrawMyAccountRequest {
+  string refresh_token = 1;
+}
+
+message WithdrawMyAccountResponse {
+  bool success = 1;
 }

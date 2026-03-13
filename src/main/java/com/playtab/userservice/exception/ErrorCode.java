@@ -28,8 +28,10 @@ public enum ErrorCode {
     DUPLICATE_EMAIL("DUPLICATE_EMAIL", "Email already exists."),
     DUPLICATE_NICKNAME("DUPLICATE_NICKNAME", "Nickname already exists."),
     PROFILE_NOT_FOUND("PROFILE_NOT_FOUND", "Profile not found."),
+    EMAIL_CREDENTIAL_NOT_FOUND("EMAIL_CREDENTIAL_NOT_FOUND", "Email credential not found."),
+    SAME_AS_OLD_PASSWORD("SAME_AS_OLD_PASSWORD", "New password must be different from current password."),
 
-    // ✅ Consent / Terms
+    // Consent / Terms
     REQUIRED_CONSENT_MISSING("REQUIRED_CONSENT_MISSING", "Required consents (SERVICE/PRIVACY) must be agreed."),
     TERMS_VERSION_REQUIRED("TERMS_VERSION_REQUIRED", "terms_version is required."),
     CONSENT_TYPE_UNSPECIFIED("CONSENT_TYPE_UNSPECIFIED", "consent type is unspecified."),

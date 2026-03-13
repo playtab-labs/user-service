@@ -8,6 +8,7 @@ import com.playtab.userservice.grpc.interceptor.AuthContextKeys;
 import com.playtab.userservice.grpc.mapper.SettingsGrpcMapper;
 import com.playtab.userservice.grpc.mapper.UserGrpcMapper;
 import com.playtab.userservice.proto.v1.*;
+import com.playtab.userservice.service.user.AccountCommandService;
 import com.playtab.userservice.service.user.ConsentCommandService;
 import com.playtab.userservice.service.user.ConsentQueryService;
 import com.playtab.userservice.service.user.UserSettingsService;
@@ -38,10 +39,8 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     private final UserSettingsService settingsService;
     private final ConsentQueryService consentQueryService;
     private final ConsentCommandService consentCommandService;
+    private final AccountCommandService accountCommandService;
 
-    // ---------------------------
-    // Signup
-    // ---------------------------
     @Override
     @Transactional
     public void signUpWithEmail(SignUpWithEmailRequest request,
@@ -65,9 +64,6 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
-    // ---------------------------
-    // Profile
-    // ---------------------------
     @Override
     @Transactional(readOnly = true)
     public void getMyProfile(GetMyProfileRequest request,
@@ -136,9 +132,6 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
-    // ---------------------------
-    // Consents (AuthConsent에 저장)
-    // ---------------------------
     @Override
     @Transactional
     public void updateConsents(UpdateConsentsRequest request,
@@ -150,7 +143,6 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
                 throw new IllegalArgumentException("consents is empty");
             }
 
-            // ✅ 비즈니스 로직은 서비스로 위임 (필수동의 false 금지 포함)
             consentCommandService.upsertConsents(identityId, request.getConsentsList());
 
             responseObserver.onNext(UpdateConsentsResponse.newBuilder().setSuccess(true).build());
@@ -160,9 +152,6 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
-    // ---------------------------
-    // Adult verify
-    // ---------------------------
     @Override
     @Transactional
     public void verifyAdult(VerifyAdultRequest request,
@@ -186,9 +175,6 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
-    // ---------------------------
-    // Email Verification
-    // ---------------------------
     @Override
     public void sendEmailVerificationCode(SendEmailVerificationCodeRequest request,
                                           StreamObserver<SendEmailVerificationCodeResponse> responseObserver) {
@@ -219,9 +205,6 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
-    // ---------------------------
-    // Settings (UserSettings 테이블)
-    // ---------------------------
     @Override
     @Transactional(readOnly = true)
     public void getMySettings(GetMySettingsRequest request,
@@ -276,9 +259,49 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
-    // ---------------------------
-    // Helpers
-    // ---------------------------
+    @Override
+    @Transactional
+    public void changeMyPassword(ChangeMyPasswordRequest request,
+                                 StreamObserver<ChangeMyPasswordResponse> responseObserver) {
+        try {
+            UUID identityId = requireIdentityId();
+
+            accountCommandService.changeMyPassword(
+                    identityId,
+                    request.getCurrentPassword(),
+                    request.getNewPassword()
+            );
+
+            responseObserver.onNext(ChangeMyPasswordResponse.newBuilder()
+                    .setSuccess(true)
+                    .build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
+    }
+
+    @Override
+    @Transactional
+    public void withdrawMyAccount(WithdrawMyAccountRequest request,
+                                  StreamObserver<WithdrawMyAccountResponse> responseObserver) {
+        try {
+            UUID identityId = requireIdentityId();
+
+            accountCommandService.withdrawMyAccount(
+                    identityId,
+                    request.getRefreshToken()
+            );
+
+            responseObserver.onNext(WithdrawMyAccountResponse.newBuilder()
+                    .setSuccess(true)
+                    .build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
+    }
+
     private UUID requireIdentityId() {
         UUID identityId = AuthContextKeys.IDENTITY_ID.get();
         if (identityId == null) throw ex.unauthenticated();
