@@ -34,17 +34,25 @@ public class AuthIdentity {
     @Column(name = "created_at")
     private Instant createdAt;
 
-    // ✅ Profile: user_profiles.identity_id FK가 있다고 가정
+    // Profile: user_profiles.identity_id FK가 있다고 가정
     @OneToOne(mappedBy = "identity", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private UserProfile profile;
 
-    // ✅ Credentials: auth_credentials.identity_id FK
+    // Credentials: auth_credentials.identity_id FK
     @OneToMany(mappedBy = "identity", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<AuthCredential> credentials = new ArrayList<>();
 
-    // ✅ Consents: auth_consents.identity_id FK
+    // Consents: auth_consents.identity_id FK
     @OneToMany(mappedBy = "identity", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<AuthConsent> consents = new ArrayList<>();
+
+    @OneToOne(mappedBy = "identity", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private UserSettings settings;
+
+    public void attachSettings(UserSettings settings) {
+        this.settings = settings;
+        settings.setIdentity(this);
+    }
 
     // ---------- 편의 메서드(핵심) ----------
     public void attachProfile(UserProfile profile) {

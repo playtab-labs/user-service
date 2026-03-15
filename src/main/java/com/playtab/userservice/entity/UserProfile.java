@@ -11,7 +11,15 @@ import java.util.UUID;
 
 @Getter @Setter
 @Entity
-@Table(name = "user_profiles")
+@Table(
+        name = "user_profiles",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uq_user_profiles_email", columnNames = "email")
+        },
+        indexes = {
+                @Index(name = "idx_user_profiles_email", columnList = "email")
+        }
+)
 public class UserProfile {
 
     @Id
@@ -50,10 +58,16 @@ public class UserProfile {
     @Column(name="updated_at")
     private Instant updatedAt;
 
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = Instant.now();
+    }
+
     @PrePersist
     void prePersist() {
         if (profileId == null) profileId = UUID.randomUUID();
         if (createdAt == null) createdAt = Instant.now();
+        if (updatedAt == null) updatedAt = Instant.now();
         if (gender == null) gender = Gender.UNSPECIFIED;
     }
 }

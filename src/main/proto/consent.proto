@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package playtab.userservice.v1;
+
+option java_multiple_files = true;
+option java_package = "com.playtab.userservice.proto.v1";
+
+/* ---------- Consents (Shared) ---------- */
+
+enum ConsentType {
+  CONSENT_TYPE_UNSPECIFIED = 0;
+  PRIVACY = 1;
+  SERVICE = 2;
+  MARKETING = 3;
+}
+
+message ConsentInput {
+  string terms_version = 1;
+  ConsentType type = 2;
+  bool is_agreed = 3;
+}

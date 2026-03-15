@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.playtab.userservice.dto.auth.*;
 import com.playtab.userservice.entity.*;
+import com.playtab.userservice.entity.enums.ConsentType;
 import com.playtab.userservice.entity.enums.CredentialType;
 import com.playtab.userservice.entity.enums.IdentityStatus;
 import com.playtab.userservice.exception.DomainException;
 import com.playtab.userservice.exception.ErrorCode;
+import com.playtab.userservice.repository.AuthConsentRepository;
 import com.playtab.userservice.repository.AuthCredentialRepository;
 import com.playtab.userservice.repository.AuthIdentityRepository;
 import com.playtab.userservice.repository.UserProfileRepository;
@@ -17,7 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class AuthService {
@@ -25,11 +27,12 @@ public class AuthService {
     private final AuthCredentialRepository credentialRepo;
     private final AuthIdentityRepository identityRepo;
     private final UserProfileRepository profileRepo;
+    private final AuthConsentRepository consentRepo;
+
     private final PasswordService passwordService;
     private final TokenService tokenService;
     private final SessionService sessionService;
 
-    // Social
     private final SocialAuthProviderRegistry socialRegistry;
     private final ObjectMapper om = new ObjectMapper();
 
@@ -37,6 +40,7 @@ public class AuthService {
             AuthCredentialRepository credentialRepo,
             AuthIdentityRepository identityRepo,
             UserProfileRepository profileRepo,
+            AuthConsentRepository consentRepo,
             PasswordService passwordService,
             TokenService tokenService,
             SessionService sessionService,
@@ -45,6 +49,7 @@ public class AuthService {
         this.credentialRepo = credentialRepo;
         this.identityRepo = identityRepo;
         this.profileRepo = profileRepo;
+        this.consentRepo = consentRepo;
         this.passwordService = passwordService;
         this.tokenService = tokenService;
         this.sessionService = sessionService;
@@ -56,7 +61,7 @@ public class AuthService {
     // ---------------------------
     @Transactional
     public AuthTokens loginWithEmail(LoginCommand cmd) {
-        AuthCredential cred = credentialRepo.findByTypeAndIdentifier(CredentialType.EMAIL, cmd.email())
+        AuthCredential cred = credentialRepo.findByTypeAndIdentifier(CredentialType.EMAIL, normalizeEmail(cmd.email()))
                 .orElseThrow(() -> new DomainException(ErrorCode.AUTH_FAILED));
 
         AuthIdentity identity = cred.getIdentity();
@@ -70,31 +75,25 @@ public class AuthService {
     }
 
     // ---------------------------
-    // Social Login (email만 최소 생성, name/gender는 UI에서)
+    // Social Login
+    // - 신규가입(또는 required consents 미존재)일 경우: consents를 반드시 받아서 저장
     // ---------------------------
     @Transactional
     public AuthTokens loginWithSocial(SocialLoginCommand cmd) {
-        if (cmd == null || cmd.type() == null) {
-            throw new DomainException(ErrorCode.INVALID_REQUEST);
-        }
-        if (cmd.type() == CredentialType.EMAIL) {
-            throw new DomainException(ErrorCode.UNSUPPORTED_SOCIAL_PROVIDER);
-        }
+        if (cmd == null || cmd.type() == null) throw new DomainException(ErrorCode.INVALID_REQUEST);
+        if (cmd.type() == CredentialType.EMAIL) throw new DomainException(ErrorCode.UNSUPPORTED_SOCIAL_PROVIDER);
 
         SocialUserInfo info = socialRegistry.get(cmd.type()).verifyAndGetUserInfo(cmd);
+        if (info == null || blank(info.providerUserId())) throw new DomainException(ErrorCode.INVALID_SOCIAL_TOKEN);
+        if (blank(info.email())) throw new DomainException(ErrorCode.SOCIAL_EMAIL_REQUIRED);
 
-        if (info == null || info.providerUserId() == null || info.providerUserId().isBlank()) {
-            throw new DomainException(ErrorCode.INVALID_SOCIAL_TOKEN);
-        }
-
-        if (info.email() == null || info.email().isBlank()) {
-            throw new DomainException(ErrorCode.SOCIAL_EMAIL_REQUIRED);
-        }
+        String normalizedEmail = normalizeEmail(info.email());
 
         // 1) provider credential(sub 등)로 기존 계정 찾기
-        AuthIdentity identity = credentialRepo.findByTypeAndIdentifier(cmd.type(), info.providerUserId())
+        Optional<AuthCredential> byProvider = credentialRepo.findByTypeAndIdentifier(cmd.type(), info.providerUserId());
+        AuthIdentity identity = byProvider
                 .map(AuthCredential::getIdentity)
-                .orElseGet(() -> resolveOrCreateIdentityAndLink(cmd.type(), info));
+                .orElseGet(() -> resolveOrCreateIdentityAndLink(cmd.type(), info, cmd.consents()));
 
         assertIdentityActiveOrThrow(identity);
 
@@ -104,17 +103,29 @@ public class AuthService {
 
     /**
      * provider credential이 없는 경우:
-     *  - 이메일로 기존 EMAIL 계정이 있으면 해당 identity에 소셜 credential 연결
-     *  - 없으면 신규 identity 생성 + 소셜 credential + profile(email만 최소 생성)
+     *  - (A) EMAIL credential로 기존 계정 찾기
+     *  - (B) user_profiles.email로도 기존 계정 찾기 (중복 identity 방지)
+     *  - 없으면 신규 identity 생성(+settings, +필수 consents 저장 강제)
      */
-    private AuthIdentity resolveOrCreateIdentityAndLink(CredentialType provider, SocialUserInfo info) {
+    private AuthIdentity resolveOrCreateIdentityAndLink(
+            CredentialType provider,
+            SocialUserInfo info,
+            List<com.playtab.userservice.proto.v1.ConsentInput> consentsFromClient
+    ) {
+        String email = normalizeEmail(info.email());
 
-        // 1) 이메일(EMAIL credential) 기준으로 기존 계정 찾기
-        AuthIdentity identity = credentialRepo.findByTypeAndIdentifier(CredentialType.EMAIL, info.email())
-                .map(AuthCredential::getIdentity)
-                .orElseGet(() -> createNewIdentityWithSocial(provider, info));
+        // (A) EMAIL credential 기준
+        Optional<AuthIdentity> byEmailCred = credentialRepo.findByTypeAndIdentifier(CredentialType.EMAIL, email)
+                .map(AuthCredential::getIdentity);
 
-        // 2) 해당 identity에 소셜 credential이 없으면 연결
+        // (B) PROFILE email 기준 (소셜 가입자도 매칭)
+        Optional<AuthIdentity> byProfileEmail = profileRepo.findByEmail(email)
+                .map(UserProfile::getIdentity);
+
+        AuthIdentity identity = byEmailCred.or(() -> byProfileEmail)
+                .orElseGet(() -> createNewIdentityWithSocial(provider, info, consentsFromClient));
+
+        // 여기부터는 “기존 identity에 소셜 credential 연결”
         boolean alreadyLinked = identity.getCredentials().stream()
                 .anyMatch(c -> c.getType() == provider && info.providerUserId().equals(c.getIdentifier()));
 
@@ -124,26 +135,34 @@ public class AuthService {
             socialCred.setIdentifier(info.providerUserId());
             socialCred.setIsPrimary(false);
             socialCred.setExternalMeta(buildExternalMetaMinimal(info));
-
             identity.addCredential(socialCred);
-            identity = identityRepo.save(identity);
         }
 
-        // 3) profile 최소 보정: email 비어있으면 채우기만
+        // profile email 보정 (비어있으면 채움)
         profileRepo.findByIdentity_IdentityId(identity.getIdentityId()).ifPresent(p -> {
-            if (p.getEmail() == null || p.getEmail().isBlank()) {
-                p.setEmail(info.email());
+            if (blank(p.getEmail())) {
+                p.setEmail(email);
                 profileRepo.save(p);
             }
         });
 
-        return identity;
+        // ✅ required consent가 없으면, 첫 소셜 로그인 시점에라도 반드시 받아서 저장(정책)
+        ensureRequiredConsents(identity, consentsFromClient);
+
+        return identityRepo.save(identity);
     }
 
-    private AuthIdentity createNewIdentityWithSocial(CredentialType provider, SocialUserInfo info) {
-        AuthIdentity identity = new AuthIdentity();
-        identity.setIdentityId(UUID.randomUUID());
+    private AuthIdentity createNewIdentityWithSocial(
+            CredentialType provider,
+            SocialUserInfo info,
+            List<com.playtab.userservice.proto.v1.ConsentInput> consentsFromClient
+    ) {
+        // ✅ 신규 소셜 가입은 필수 약관 동의가 필요
+        validateRequiredConsentsOrThrow(consentsFromClient);
 
+        AuthIdentity identity = new AuthIdentity();
+
+        // 1) Social Credential
         AuthCredential socialCred = new AuthCredential();
         socialCred.setType(provider);
         socialCred.setIdentifier(info.providerUserId());
@@ -151,12 +170,150 @@ public class AuthService {
         socialCred.setExternalMeta(buildExternalMetaMinimal(info));
         identity.addCredential(socialCred);
 
+        // 2) Profile (email만 최소)
         UserProfile profile = new UserProfile();
-        profile.setEmail(info.email());
-        profile.setName(null); // 명시적으로 null
+        profile.setEmail(normalizeEmail(info.email()));
+        profile.setName(null);
         identity.attachProfile(profile);
 
+        // 3) Settings: EMAIL 가입과 동일하게 “가입 시점에 생성”
+        UserSettings settings = new UserSettings();
+        identity.attachSettings(settings);
+
+        // 4) Consents: 가입 시점에 생성(필수 포함)
+        upsertConsentsForIdentity(identity, consentsFromClient);
+
         return identityRepo.save(identity);
+    }
+
+    private void ensureRequiredConsents(AuthIdentity identity, List<com.playtab.userservice.proto.v1.ConsentInput> consentsFromClient) {
+        boolean hasRequired = hasRequiredConsents(identity.getIdentityId());
+
+        if (hasRequired) return;
+
+        // required가 없는데 입력도 없으면 정책 위반
+        validateRequiredConsentsOrThrow(consentsFromClient);
+
+        // 기존 identity에도 동의 저장(업서트)
+        upsertConsentsByRepo(identity.getIdentityId(), consentsFromClient);
+    }
+
+    private boolean hasRequiredConsents(UUID identityId) {
+        // 간단 체크: SERVICE/PRIVACY 각각 agreed=true 1개 이상 존재 여부
+        boolean service = consentRepo.existsAgreedByIdentityAndType(identityId, ConsentType.SERVICE);
+        boolean privacy = consentRepo.existsAgreedByIdentityAndType(identityId, ConsentType.PRIVACY);
+        return service && privacy;
+    }
+
+    private void validateRequiredConsentsOrThrow(List<com.playtab.userservice.proto.v1.ConsentInput> inputs) {
+        if (inputs == null || inputs.isEmpty()) {
+            throw new DomainException(ErrorCode.REQUIRED_CONSENT_MISSING);
+        }
+        boolean service = inputs.stream().anyMatch(c ->
+                mapConsentType(c.getType()) == ConsentType.SERVICE
+                        && c.getIsAgreed()
+                        && !blank(c.getTermsVersion())
+        );
+        boolean privacy = inputs.stream().anyMatch(c ->
+                mapConsentType(c.getType()) == ConsentType.PRIVACY
+                        && c.getIsAgreed()
+                        && !blank(c.getTermsVersion())
+        );
+        if (!service || !privacy) throw new DomainException(ErrorCode.REQUIRED_CONSENT_MISSING);
+    }
+
+    private void upsertConsentsForIdentity(AuthIdentity identity, List<com.playtab.userservice.proto.v1.ConsentInput> inputs) {
+        Instant now = Instant.now();
+        Map<ConsentKey, com.playtab.userservice.proto.v1.ConsentInput> deduped = dedupe(inputs);
+
+        for (var entry : deduped.entrySet()) {
+            ConsentKey key = entry.getKey();
+            var in = entry.getValue();
+
+            AuthConsent c = new AuthConsent();
+            c.setType(key.type);
+            c.setTermsVersion(key.termsVersion);
+            c.setIsAgreed(in.getIsAgreed());
+            c.setAgreedAt(in.getIsAgreed() ? now : null);
+
+            identity.addConsent(c);
+        }
+    }
+
+    private void upsertConsentsByRepo(UUID identityId, List<com.playtab.userservice.proto.v1.ConsentInput> inputs) {
+        Instant now = Instant.now();
+        Map<ConsentKey, com.playtab.userservice.proto.v1.ConsentInput> deduped = dedupe(inputs);
+
+        for (var entry : deduped.entrySet()) {
+            ConsentKey key = entry.getKey();
+            var in = entry.getValue();
+
+            // (identityId, type, termsVersion) 기준 업서트
+            AuthConsent consent = consentRepo
+                    .findByIdentity_IdentityIdAndTypeAndTermsVersion(identityId, key.type, key.termsVersion)
+                    .orElseGet(() -> {
+                        AuthConsent c = new AuthConsent();
+                        // identity는 lazy라서 repo save 전에 FK만 맞으면 됨, 하지만 깔끔하게 reference를 얻어도 됨
+                        AuthIdentity ref = identityRepo.getReferenceById(identityId);
+                        c.setIdentity(ref);
+                        c.setType(key.type);
+                        c.setTermsVersion(key.termsVersion);
+                        return c;
+                    });
+
+            // 필수 약관은 false로 변경 불가(정책)
+            if ((key.type == ConsentType.SERVICE || key.type == ConsentType.PRIVACY) && !in.getIsAgreed()) {
+                throw new DomainException(ErrorCode.REQUIRED_CONSENT_MISSING);
+            }
+
+            consent.setIsAgreed(in.getIsAgreed());
+            consent.setAgreedAt(in.getIsAgreed() ? now : null);
+            consentRepo.save(consent);
+        }
+    }
+
+    private Map<ConsentKey, com.playtab.userservice.proto.v1.ConsentInput> dedupe(List<com.playtab.userservice.proto.v1.ConsentInput> inputs) {
+        Map<ConsentKey, com.playtab.userservice.proto.v1.ConsentInput> map = new LinkedHashMap<>();
+        if (inputs == null) return map;
+
+        for (var c : inputs) {
+            if (c == null) continue;
+            ConsentType type = mapConsentType(c.getType());
+            String v = c.getTermsVersion();
+            if (blank(v)) throw new DomainException(ErrorCode.TERMS_VERSION_REQUIRED);
+            map.put(new ConsentKey(type, v), c);
+        }
+        return map;
+    }
+
+    private ConsentType mapConsentType(com.playtab.userservice.proto.v1.ConsentType t) {
+        return switch (t) {
+            case PRIVACY -> ConsentType.PRIVACY;
+            case SERVICE -> ConsentType.SERVICE;
+            case MARKETING -> ConsentType.MARKETING;
+            case CONSENT_TYPE_UNSPECIFIED, UNRECOGNIZED ->
+                    throw new DomainException(ErrorCode.CONSENT_TYPE_UNSPECIFIED);
+        };
+    }
+
+    private static final class ConsentKey {
+        private final ConsentType type;
+        private final String termsVersion;
+
+        private ConsentKey(ConsentType type, String termsVersion) {
+            this.type = type;
+            this.termsVersion = termsVersion;
+        }
+
+        @Override public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof ConsentKey other)) return false;
+            return type == other.type && Objects.equals(termsVersion, other.termsVersion);
+        }
+
+        @Override public int hashCode() {
+            return Objects.hash(type, termsVersion);
+        }
     }
 
     private ObjectNode buildExternalMetaMinimal(SocialUserInfo info) {
@@ -269,4 +426,12 @@ public class AuthService {
         return p.getEmail() != null && !p.getEmail().isBlank()
                 && p.getName() != null && !p.getName().isBlank();
     }
+
+    private String normalizeEmail(String email) {
+        if (email == null) return null;
+        String e = email.trim().toLowerCase(Locale.ROOT);
+        return e.isBlank() ? null : e;
+    }
+
+    private boolean blank(String s) { return s == null || s.isBlank(); }
 }

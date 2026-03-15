@@ -6,12 +6,13 @@ import com.playtab.userservice.dto.user.SignupCommand;
 import com.playtab.userservice.entity.UserProfile;
 import com.playtab.userservice.entity.enums.ConsentType;
 import com.playtab.userservice.entity.enums.Gender;
+import com.playtab.userservice.exception.DomainException;
+import com.playtab.userservice.exception.ErrorCode;
 import com.playtab.userservice.proto.v1.*;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.UUID;
 
 @Component
@@ -87,7 +88,8 @@ public class UserGrpcMapper {
             case PRIVACY -> ConsentType.PRIVACY;
             case SERVICE -> ConsentType.SERVICE;
             case MARKETING -> ConsentType.MARKETING;
-            default -> ConsentType.SERVICE;
+            case CONSENT_TYPE_UNSPECIFIED, UNRECOGNIZED ->
+                    throw new DomainException(ErrorCode.CONSENT_TYPE_UNSPECIFIED);
         };
     }
 

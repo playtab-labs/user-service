@@ -9,7 +9,13 @@ import java.time.Instant;
 
 @Getter @Setter
 @Entity
-@Table(name = "auth_consents")
+@Table(
+        name = "auth_consents",
+        indexes = {
+                @Index(name = "idx_consents_identity_type", columnList = "identity_id, type"),
+                @Index(name = "idx_consents_identity_type_terms", columnList = "identity_id, type, terms_version")
+        }
+)
 public class AuthConsent {
 
     @Id
