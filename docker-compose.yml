@@ -1,6 +1,6 @@
 services:
   user-service:
-    build: .
+    image: ${ECR_IMAGE}
     ports:
       - "9090:9090"
     env_file:
