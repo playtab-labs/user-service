@@ -10,4 +10,6 @@ import java.util.UUID;
 public interface AuthCredentialRepository extends JpaRepository<AuthCredential, UUID> {
     Optional<AuthCredential> findByTypeAndIdentifier(CredentialType type, String identifier);
     boolean existsByTypeAndIdentifier(CredentialType type, String identifier);
+
+    Optional<AuthCredential> findByIdentity_IdentityIdAndType(UUID identityId, CredentialType type);
 }

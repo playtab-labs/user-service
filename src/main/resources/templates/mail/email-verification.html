@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>이메일 인증</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f6f7fb; font-family:Arial, sans-serif;">
+<div style="max-width:600px; margin:40px auto; background:#ffffff; border-radius:12px; padding:40px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <h2 style="margin:0 0 20px; color:#222;">PlayTab 이메일 인증</h2>
+
+    <p style="font-size:15px; color:#444; line-height:1.6;">
+        안녕하세요.<br>
+        PlayTab 이메일 인증을 위해 아래 인증번호를 입력해주세요.
+    </p>
+
+    <div style="margin:30px 0; text-align:center;">
+        <div style="display:inline-block; font-size:32px; font-weight:bold; letter-spacing:8px; color:#111; background:#f1f3f5; padding:18px 28px; border-radius:10px;"
+             th:text="${code}">
+            123456
+        </div>
+    </div>
+
+    <p style="font-size:14px; color:#666;">
+        인증번호 유효시간은
+        <strong th:text="${ttlSeconds}">600</strong>초 입니다.
+    </p>
+
+    <p style="margin-top:30px; font-size:13px; color:#999;">
+        본 메일은 발신전용입니다.
+    </p>
+</div>
+</body>
+</html>
