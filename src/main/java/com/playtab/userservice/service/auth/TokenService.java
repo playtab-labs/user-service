@@ -55,16 +55,6 @@ public class TokenService {
                 .compact();
     }
 
-    public UUID parseAccessIdentityId(String accessToken) {
-        Claims c = Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(accessToken)
-                .getPayload();
-
-        return UUID.fromString(c.getSubject());
-    }
-
     public UUID parseSubject(String jwt) {
         try {
             Claims c = Jwts.parser().verifyWith(key).build()

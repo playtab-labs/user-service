@@ -1,0 +1,8 @@
+services:
+  user-service:
+    image: ${ECR_IMAGE}
+    ports:
+      - "9090:9090"
+    env_file:
+      - .env
+    restart: unless-stopped

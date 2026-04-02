@@ -27,12 +27,12 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
 
   mail:
-    host: smtp.gmail.com
-    port: 587
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME}
     password: ${MAIL_PASSWORD}
     properties:
@@ -43,7 +43,7 @@ email-verification:
   ttl-seconds: ${EMAIL_VERIFY_TTL_SECONDS:600}  # 메일 인증 지속 시간:인증 성공 후 최대 10분 내로 회원가입 완료해야함
   max-attempts: ${EMAIL_VERIFY_MAX_ATTEMPTS:5}
   resend-cooldown-seconds: ${EMAIL_VERIFY_RESEND_COOLDOWN_SECONDS:30}  # 인증번호 재발송 최소 대기시간
-  from: ${EMAIL_FROM:no-reply@playtab.com}
+  from: ${MAIL_USERNAME:no-reply@playtap.co.kr}
 
 auth:
   login:
