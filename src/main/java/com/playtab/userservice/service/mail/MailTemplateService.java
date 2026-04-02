@@ -19,7 +19,7 @@ public class MailTemplateService {
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
 
-    @Value("${mail.from:no-reply@playtab.com}")
+    @Value("${spring.mail.username}")
     private String from;
 
     /**

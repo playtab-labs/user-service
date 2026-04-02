@@ -129,14 +129,9 @@ public class EmailVerificationService {
     }
 
     private void sendVerificationEmail(String to, String code) {
-        System.out.println("#########################################");
-        System.out.println("대상 이메일: " + to);
-        System.out.println("생성된 인증번호: " + code);
-        System.out.println("#########################################");
-
         mailTemplateService.sendHtmlMail(
                 to,
-                "[PlayTab] 이메일 인증번호",
+                "[PlayTap] 이메일 인증번호",
                 MailTemplateType.EMAIL_VERIFICATION.templateName(),
                 Map.of(
                         "code", code,
