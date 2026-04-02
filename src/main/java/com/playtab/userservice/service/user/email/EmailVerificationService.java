@@ -163,7 +163,7 @@ public class EmailVerificationService {
     }
 
     private String redisKey(String email, String sessionId) {
-        return "email_verify:" + email + ":" + sessionId;
+        return "user:email_verify:" + email + ":" + sessionId;
     }
 
     private String sha256Hex(String raw) {
