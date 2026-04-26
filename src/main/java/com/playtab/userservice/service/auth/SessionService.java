@@ -5,7 +5,7 @@ import com.playtab.userservice.entity.AuthSession;
 import com.playtab.userservice.exception.DomainException;
 import com.playtab.userservice.exception.ErrorCode;
 import com.playtab.userservice.repository.AuthSessionRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
