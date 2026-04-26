@@ -206,7 +206,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public void getMySettings(GetMySettingsRequest request,
                               StreamObserver<UserSettingsResponse> responseObserver) {
         try {

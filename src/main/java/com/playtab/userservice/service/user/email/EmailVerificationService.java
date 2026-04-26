@@ -1,7 +1,9 @@
 package com.playtab.userservice.service.user.email;
 
+import com.playtab.userservice.entity.enums.CredentialType;
 import com.playtab.userservice.exception.DomainException;
 import com.playtab.userservice.exception.ErrorCode;
+import com.playtab.userservice.repository.AuthCredentialRepository;
 import com.playtab.userservice.service.mail.MailTemplateService;
 import com.playtab.userservice.service.mail.MailTemplateType;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,6 +23,7 @@ public class EmailVerificationService {
 
     private final EmailVerificationRedisRepository repo;
     private final MailTemplateService mailTemplateService;
+    private final AuthCredentialRepository authCredentialRepository;
 
     @Value("${email-verification.ttl-seconds:600}")
     private long ttlSeconds;
@@ -33,10 +36,12 @@ public class EmailVerificationService {
 
     public EmailVerificationService(
             EmailVerificationRedisRepository repo,
-            MailTemplateService mailTemplateService
+            MailTemplateService mailTemplateService,
+            AuthCredentialRepository authCredentialRepository
     ) {
         this.repo = repo;
         this.mailTemplateService = mailTemplateService;
+        this.authCredentialRepository = authCredentialRepository;
     }
 
     /** 인증번호 발송(또는 재발송) */
@@ -44,6 +49,10 @@ public class EmailVerificationService {
         String email = normalizeEmail(emailRaw);
         String sessionId = normalizeSessionId(sessionIdRaw);
         String key = redisKey(email, sessionId);
+
+        if (authCredentialRepository.existsByTypeAndIdentifier(CredentialType.EMAIL, email)) {
+            throw new DomainException(ErrorCode.DUPLICATE_EMAIL);
+        }
 
         repo.find(key).ifPresent(existing -> {
             Instant lastSentAt = existing.getLastSentAt();

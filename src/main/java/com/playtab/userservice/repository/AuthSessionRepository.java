@@ -16,10 +16,10 @@ public interface AuthSessionRepository extends JpaRepository<AuthSession, UUID> 
     Optional<AuthSession> findByRefreshTokenHash(String refreshTokenHash);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select s from AuthSession s where s.refreshTokenHash = :hash")
+    @Query("select s from AuthSession s join fetch s.identity where s.refreshTokenHash = :hash")
     Optional<AuthSession> findByRefreshTokenHashForUpdate(@Param("hash") String hash);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("""
         update AuthSession s
            set s.isRevoked = true
