@@ -63,11 +63,7 @@ public class AccountCommandService {
         }
 
         emailCred.setPasswordHash(passwordService.hash(newPassword));
-        credentialRepo.save(emailCred);
-
-        // 선택 정책:
-        // 비밀번호 변경 후 기존 세션 전체 만료시키고 재로그인 유도
-        sessionRepo.revokeAllByIdentityId(identityId);
+        credentialRepo.saveAndFlush(emailCred);
     }
 
     /**
