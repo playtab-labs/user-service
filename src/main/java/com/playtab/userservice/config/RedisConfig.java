@@ -1,6 +1,7 @@
 package com.playtab.userservice.config;
 
 import com.playtab.userservice.service.user.email.EmailVerificationState;
+import com.playtab.userservice.service.user.passwordreset.PasswordResetState;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -16,15 +17,24 @@ public class RedisConfig {
     ) {
         RedisTemplate<String, EmailVerificationState> t = new RedisTemplate<>();
         t.setConnectionFactory(cf);
-
-        // Key / HashKey: string
         t.setKeySerializer(RedisSerializer.string());
         t.setHashKeySerializer(RedisSerializer.string());
-
-        // Value / HashValue: json (Spring Data Redis 4.x 권장)
         t.setValueSerializer(RedisSerializer.json());
         t.setHashValueSerializer(RedisSerializer.json());
+        t.afterPropertiesSet();
+        return t;
+    }
 
+    @Bean
+    public RedisTemplate<String, PasswordResetState> passwordResetRedisTemplate(
+            RedisConnectionFactory cf
+    ) {
+        RedisTemplate<String, PasswordResetState> t = new RedisTemplate<>();
+        t.setConnectionFactory(cf);
+        t.setKeySerializer(RedisSerializer.string());
+        t.setHashKeySerializer(RedisSerializer.string());
+        t.setValueSerializer(RedisSerializer.json());
+        t.setHashValueSerializer(RedisSerializer.json());
         t.afterPropertiesSet();
         return t;
     }

@@ -44,6 +44,11 @@ email-verification:
   max-attempts: ${EMAIL_VERIFY_MAX_ATTEMPTS:5}
   resend-cooldown-seconds: ${EMAIL_VERIFY_RESEND_COOLDOWN_SECONDS:30}  # 인증번호 재발송 최소 대기시간
 
+password-reset:
+  ttl-seconds: ${PASSWORD_RESET_TTL_SECONDS:600}
+  max-attempts: ${PASSWORD_RESET_MAX_ATTEMPTS:5}
+  resend-cooldown-seconds: ${PASSWORD_RESET_RESEND_COOLDOWN_SECONDS:60}
+
 auth:
   login:
     max-failures: ${AUTH_LOGIN_MAX_FAILURES:5}
