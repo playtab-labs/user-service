@@ -44,6 +44,15 @@ public enum ErrorCode {
     EMAIL_VERIFICATION_TOO_MANY_ATTEMPTS("EMAIL_VERIFICATION_TOO_MANY_ATTEMPTS", "Too many attempts."),
     EMAIL_NOT_VERIFIED("EMAIL_NOT_VERIFIED", "Email not verified."),
     EMAIL_VERIFICATION_RESEND_TOO_FAST("EMAIL_VERIFICATION_RESEND_TOO_FAST", "Please wait before resending the code."),
+    EMAIL_NOT_REGISTERED("EMAIL_NOT_REGISTERED", "Email is not registered."),
+
+    // ---------- Password Reset ----------
+    PASSWORD_RESET_NOT_FOUND("PASSWORD_RESET_NOT_FOUND", "Password reset code not found."),
+    PASSWORD_RESET_EXPIRED("PASSWORD_RESET_EXPIRED", "Password reset code expired."),
+    PASSWORD_RESET_CODE_MISMATCH("PASSWORD_RESET_CODE_MISMATCH", "Password reset code mismatch."),
+    PASSWORD_RESET_TOO_MANY_ATTEMPTS("PASSWORD_RESET_TOO_MANY_ATTEMPTS", "Too many password reset attempts."),
+    PASSWORD_RESET_NOT_VERIFIED("PASSWORD_RESET_NOT_VERIFIED", "Password reset code not verified."),
+    PASSWORD_RESET_RESEND_TOO_FAST("PASSWORD_RESET_RESEND_TOO_FAST", "Please wait before resending the reset code."),
 
     // ---------- Common ----------
     INVALID_REQUEST("INVALID_REQUEST", "Invalid request."),

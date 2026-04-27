@@ -14,6 +14,7 @@ import com.playtab.userservice.service.user.ConsentQueryService;
 import com.playtab.userservice.service.user.UserSettingsService;
 import com.playtab.userservice.service.user.UserSignupService;
 import com.playtab.userservice.service.user.email.EmailVerificationService;
+import com.playtab.userservice.service.user.passwordreset.PasswordResetService;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -40,6 +41,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     private final ConsentQueryService consentQueryService;
     private final ConsentCommandService consentCommandService;
     private final AccountCommandService accountCommandService;
+    private final PasswordResetService passwordResetService;
 
     @Override
     @Transactional
@@ -294,6 +296,49 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
             );
 
             responseObserver.onNext(WithdrawMyAccountResponse.newBuilder()
+                    .setSuccess(true)
+                    .build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
+    }
+
+    @Override
+    public void sendPasswordResetCode(SendPasswordResetCodeRequest request,
+                                      StreamObserver<SendPasswordResetCodeResponse> responseObserver) {
+        try {
+            long ttl = passwordResetService.sendCode(request.getEmail());
+            responseObserver.onNext(SendPasswordResetCodeResponse.newBuilder()
+                    .setSuccess(true)
+                    .setTtlSeconds(ttl)
+                    .build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
+    }
+
+    @Override
+    public void verifyPasswordResetCode(VerifyPasswordResetCodeRequest request,
+                                        StreamObserver<VerifyPasswordResetCodeResponse> responseObserver) {
+        try {
+            passwordResetService.verifyCode(request.getEmail(), request.getCode());
+            responseObserver.onNext(VerifyPasswordResetCodeResponse.newBuilder()
+                    .setSuccess(true)
+                    .build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
+    }
+
+    @Override
+    public void resetPassword(ResetPasswordRequest request,
+                              StreamObserver<ResetPasswordResponse> responseObserver) {
+        try {
+            passwordResetService.resetPassword(request.getEmail(), request.getNewPassword());
+            responseObserver.onNext(ResetPasswordResponse.newBuilder()
                     .setSuccess(true)
                     .build());
             responseObserver.onCompleted();

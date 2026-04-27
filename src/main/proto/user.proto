@@ -27,6 +27,10 @@ service UserService {
 
   rpc ChangeMyPassword(ChangeMyPasswordRequest) returns (ChangeMyPasswordResponse);
   rpc WithdrawMyAccount(WithdrawMyAccountRequest) returns (WithdrawMyAccountResponse);
+
+  rpc SendPasswordResetCode(SendPasswordResetCodeRequest) returns (SendPasswordResetCodeResponse);
+  rpc VerifyPasswordResetCode(VerifyPasswordResetCodeRequest) returns (VerifyPasswordResetCodeResponse);
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
 }
 
 /* ---------- Settings ---------- */
@@ -155,5 +159,32 @@ message WithdrawMyAccountRequest {
 }
 
 message WithdrawMyAccountResponse {
+  bool success = 1;
+}
+
+message SendPasswordResetCodeRequest {
+  string email = 1;
+}
+
+message SendPasswordResetCodeResponse {
+  bool success = 1;
+  int64 ttl_seconds = 2;
+}
+
+message VerifyPasswordResetCodeRequest {
+  string email = 1;
+  string code = 2;
+}
+
+message VerifyPasswordResetCodeResponse {
+  bool success = 1;
+}
+
+message ResetPasswordRequest {
+  string email = 1;
+  string new_password = 2;
+}
+
+message ResetPasswordResponse {
   bool success = 1;
 }
