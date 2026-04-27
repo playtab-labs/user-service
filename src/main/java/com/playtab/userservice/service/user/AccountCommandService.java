@@ -101,7 +101,7 @@ public class AccountCommandService {
         }
 
         identity.setStatus(IdentityStatus.DELETED);
-        identityRepo.save(identity);
+        identityRepo.saveAndFlush(identity);
 
         sessionRepo.revokeAllByIdentityId(identityId);
     }
