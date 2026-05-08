@@ -15,9 +15,14 @@ import com.playtab.userservice.service.user.UserSettingsService;
 import com.playtab.userservice.service.user.UserSignupService;
 import com.playtab.userservice.service.user.email.EmailVerificationService;
 import com.playtab.userservice.service.user.passwordreset.PasswordResetService;
+import com.playtab.userservice.exception.DomainException;
+import com.playtab.userservice.exception.ErrorCode;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -347,11 +352,102 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public void adminListUsers(AdminListUsersRequest request,
+                               StreamObserver<AdminListUsersResponse> responseObserver) {
+        try {
+            requireAdmin();
+
+            int page = request.getPage() > 0 ? request.getPage() : 0;
+            int size = request.getSize() > 0 ? request.getSize() : 20;
+            PageRequest pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+
+            String emailFilter = request.getEmailFilter();
+            Page<UserProfile> result = (emailFilter != null && !emailFilter.isBlank())
+                    ? profileRepo.findByEmailContainingIgnoreCase(emailFilter, pageable)
+                    : profileRepo.findAll(pageable);
+
+            AdminListUsersResponse.Builder builder = AdminListUsersResponse.newBuilder()
+                    .setTotal(result.getTotalElements())
+                    .setPage(page)
+                    .setSize(size);
+
+            for (UserProfile p : result.getContent()) {
+                builder.addUsers(toAdminUserSummary(p));
+            }
+
+            responseObserver.onNext(builder.build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void adminGetUser(AdminGetUserRequest request,
+                             StreamObserver<AdminGetUserResponse> responseObserver) {
+        try {
+            requireAdmin();
+
+            UUID identityId = UUID.fromString(request.getIdentityId());
+            UserProfile profile = profileRepo.findByIdentity_IdentityId(identityId)
+                    .orElseThrow(() -> new DomainException(ErrorCode.PROFILE_NOT_FOUND));
+
+            responseObserver.onNext(AdminGetUserResponse.newBuilder()
+                    .setUser(toAdminUserDetail(profile))
+                    .build());
+            responseObserver.onCompleted();
+        } catch (Exception e) {
+            responseObserver.onError(ex.toStatus(e));
+        }
+    }
+
+    private AdminUserSummary toAdminUserSummary(UserProfile p) {
+        return AdminUserSummary.newBuilder()
+                .setIdentityId(p.getIdentity().getIdentityId().toString())
+                .setProfileId(p.getProfileId().toString())
+                .setEmail(nvl(p.getEmail()))
+                .setName(nvl(p.getName()))
+                .setRole(p.getIdentity().getRole().name())
+                .setStatus(p.getIdentity().getStatus().name())
+                .setCreatedAt(mapper.toTs(p.getCreatedAt()))
+                .build();
+    }
+
+    private AdminUserDetail toAdminUserDetail(UserProfile p) {
+        return AdminUserDetail.newBuilder()
+                .setIdentityId(p.getIdentity().getIdentityId().toString())
+                .setProfileId(p.getProfileId().toString())
+                .setEmail(nvl(p.getEmail()))
+                .setName(nvl(p.getName()))
+                .setGender(p.getGender() != null ? p.getGender().name() : "")
+                .setPhoneNumber(nvl(p.getPhoneNumber()))
+                .setBirthDate(p.getBirthDate() != null ? p.getBirthDate().toString() : "")
+                .setIsAdult(Boolean.TRUE.equals(p.getIsAdult()))
+                .setNationality(nvl(p.getNationality()))
+                .setRole(p.getIdentity().getRole().name())
+                .setStatus(p.getIdentity().getStatus().name())
+                .setCreatedAt(mapper.toTs(p.getCreatedAt()))
+                .setUpdatedAt(mapper.toTs(p.getUpdatedAt()))
+                .build();
+    }
+
+    private void requireAdmin() {
+        String role = AuthContextKeys.ROLE.get();
+        if (!"ADMIN".equals(role)) {
+            throw new DomainException(ErrorCode.FORBIDDEN);
+        }
+    }
+
     private UUID requireIdentityId() {
         UUID identityId = AuthContextKeys.IDENTITY_ID.get();
         if (identityId == null) throw ex.unauthenticated();
         return identityId;
     }
+
+    private String nvl(String s) { return s == null ? "" : s; }
 
     private boolean isProfileCompleted(UserProfile p) {
         return p.getEmail() != null && !p.getEmail().isBlank()

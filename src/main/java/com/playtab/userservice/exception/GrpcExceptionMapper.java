@@ -16,8 +16,9 @@ public class GrpcExceptionMapper {
             ErrorCode code = de.getErrorCode(); // ✅ 네 DomainException에 getter 있어야 함
             return switch (code) {
                 case AUTH_FAILED -> Status.UNAUTHENTICATED.withDescription(de.getMessage()).asRuntimeException();
-                case ACCOUNT_DELETED, ACCOUNT_LOCKED -> Status.PERMISSION_DENIED.withDescription(de.getMessage()).asRuntimeException();
+                case FORBIDDEN, ACCOUNT_DELETED, ACCOUNT_LOCKED -> Status.PERMISSION_DENIED.withDescription(de.getMessage()).asRuntimeException();
                 case DUPLICATE_EMAIL, DUPLICATE_NICKNAME -> Status.ALREADY_EXISTS.withDescription(de.getMessage()).asRuntimeException();
+                case PROFILE_NOT_FOUND, NOT_FOUND -> Status.NOT_FOUND.withDescription(de.getMessage()).asRuntimeException();
                 default -> Status.INTERNAL.withDescription(de.getMessage()).asRuntimeException();
             };
         }
